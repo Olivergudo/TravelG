@@ -1,0 +1,1 @@
+import type { MetadataRoute } from "next";export default function manifest():MetadataRoute.Manifest{return {name:"Gasto Listo",short_name:"Gasto Listo",description:"Controla gastos y compras rápidamente",start_url:"/",display:"standalone",background_color:"#f5f7f5",theme_color:"#176b46",icons:[{src:"/icon.svg",sizes:"any",type:"image/svg+xml"}]}}

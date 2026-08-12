@@ -1,0 +1,2 @@
+'use client';import {useEffect,useState}from'react';import {emptyData,repository}from'@/lib/repository';import type{AppData}from'@/lib/types';
+export function useAppData(){const[data,setData]=useState<AppData>(emptyData);const[ready,setReady]=useState(false);useEffect(()=>{repository.load().then(d=>{setData(d);setReady(true)})},[]);const update=(fn:(d:AppData)=>AppData)=>setData(old=>{const next=fn(old);repository.save(next).catch(()=>{});return next});return{data,update,ready}}
