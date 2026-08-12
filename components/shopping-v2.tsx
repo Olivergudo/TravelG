@@ -1,9 +1,10 @@
 "use client";
 
-import { ChevronDown, ChevronLeft, ChevronRight, ReceiptText, Search, ShoppingBasket } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, Pencil, ReceiptText, Search, ShoppingBasket, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { categoryEmoji, formatMoney } from "./expense-ui";
-import type { AppData, Category, Purchase } from "@/lib/types";
+import { categoryEmoji, formatMoney, QuickExpenseForm } from "./expense-ui";
+import type { AppData, Category, Expense, Purchase } from "@/lib/types";
+import { deleteExpense, saveExpense } from "@/lib/expense-sync";
 
 type Update = (fn: (data: AppData) => AppData) => void;
 const monthKey = (value: string) => new Date(value).toLocaleDateString("es-CL", { month: "long", year: "numeric" });
@@ -31,7 +32,7 @@ export function ShoppingV2({ data, update }: { data: AppData; update: Update; sh
     });
   }, [data.expenses, update]);
 
-  if (selected) return <PurchaseDetail purchase={selected} data={data} back={() => setSelectedId(undefined)} />;
+  if (selected) return <PurchaseDetail purchase={selected} data={data} update={update} back={() => setSelectedId(undefined)} />;
   return <PurchaseHistory data={data} open={setSelectedId} />;
 }
 
@@ -83,13 +84,21 @@ function PurchaseHistory({ data, open }: { data: AppData; open: (id: string) => 
   </>;
 }
 
-function PurchaseDetail({ purchase, data, back }: { purchase: Purchase; data: AppData; back: () => void }) {
+function PurchaseDetail({ purchase, data, update, back }: { purchase: Purchase; data: AppData; update: Update; back: () => void }) {
+  const [editing, setEditing] = useState(false);
   const expense = data.expenses.find((item) => item.id === purchase.expenseId);
+  const remove = () => {
+    if (!window.confirm("¿Eliminar este gasto y su compra asociada?")) return;
+    if (expense) update((current) => deleteExpense(current, expense.id));
+    else update((current) => ({ ...current, purchases: current.purchases.filter((item) => item.id !== purchase.id) }));
+    back();
+  };
   return <>
-    <header className="sticky top-0 z-20 flex min-h-[68px] items-center border-b border-black/[.05] bg-white/95 px-3 pb-2 pt-[max(.5rem,env(safe-area-inset-top))] backdrop-blur-xl"><button onClick={back} className="flex min-h-12 items-center gap-1 rounded-2xl px-3 font-bold text-[#176b46]"><ChevronLeft size={22}/> Volver</button><h1 className="min-w-0 flex-1 truncate pr-4 text-center text-lg font-bold">Detalle de compra</h1></header>
+    <header className="sticky top-0 z-20 flex min-h-[68px] items-center gap-1 border-b border-black/[.05] bg-white/95 px-3 pb-2 pt-[max(.5rem,env(safe-area-inset-top))] backdrop-blur-xl"><button onClick={back} aria-label="Volver" className="grid h-11 w-11 place-items-center rounded-2xl text-[#176b46]"><ChevronLeft size={22}/></button><h1 className="min-w-0 flex-1 truncate text-center text-lg font-bold">Detalle de compra</h1>{expense && <button onClick={() => setEditing(true)} aria-label="Editar gasto" title="Editar gasto" className="grid h-11 w-11 place-items-center rounded-2xl text-[#176b46]"><Pencil size={19}/></button>}<button onClick={remove} aria-label="Eliminar gasto" title="Eliminar gasto" className="grid h-11 w-11 place-items-center rounded-2xl text-red-600"><Trash2 size={19}/></button></header>
     <div className="px-4 py-5 pb-28"><section className="theme-card rounded-[28px] bg-white p-5"><div className="mb-6 text-center"><ReceiptText className="mx-auto mb-2 text-[#176b46]"/><h2 className="text-xl font-bold uppercase">{purchase.supermarketName}</h2><p className="text-sm text-[#718078]">{new Date(purchase.completedAt).toLocaleDateString("es-CL", { dateStyle: "long" })}</p></div>
       {purchase.items.length ? purchase.items.map((item) => <div key={item.id} className="flex border-b border-dashed border-black/10 py-3"><span className="flex-1"><b className="block">{item.productName}</b><small className="text-[#718078]">{item.quantity} × {formatMoney(item.unitPrice)}</small></span><b>{formatMoney(item.totalPrice)}</b></div>) : <div className="rounded-2xl bg-[#f3f6f3] p-4"><b className="block">Registro manual</b>{expense?.description && <p className="mt-1 text-sm text-[#718078]">{expense.description}</p>}</div>}
       <div className="mt-6 flex items-end border-t border-black/10 pt-4"><b className="flex-1 text-lg">TOTAL</b><b className="text-2xl">{formatMoney(purchase.total)}</b></div>
     </section></div>
+    {editing && expense && <QuickExpenseForm categories={data.categories} expense={expense} close={() => setEditing(false)} save={(next: Expense) => { update((current) => saveExpense(current, next)); setEditing(false); }} remove={remove} />}
   </>;
 }

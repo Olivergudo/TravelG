@@ -12,10 +12,10 @@ import { ShoppingV2 } from "./shopping-v2";
 import { ReceiptScanner } from "./receipt-scanner";
 import { categoryEmoji, CategoryManager, formatMoney, QuickExpenseForm } from "./expense-ui";
 import { useAppData } from "@/hooks/use-app-data";
-import type { AppData, Expense, Purchase } from "@/lib/types";
+import type { AppData, Expense } from "@/lib/types";
+import { deleteExpense, saveExpense } from "@/lib/expense-sync";
 import { FinanceCharts, FinanceHeroDonut } from "./finance-charts";
 type Update = (fn: (data: AppData) => AppData) => void;
-const uid = () => globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
 export function AppShell() {
   const { data, update, ready } = useAppData();
@@ -121,23 +121,7 @@ function Finances({ data, update, dark, toggleTheme }: { data: AppData; update: 
     .sort((a, b) => b.total - a.total);
   const largestCategoryTotal = totals[0]?.total || 1;
   const save = (expense: Expense) => {
-    update((d) => {
-      if (editing) return { ...d, expenses: d.expenses.map((e) => (e.id === expense.id ? expense : e)) };
-      if (expense.categoryId !== "supermarket") return { ...d, expenses: [expense, ...d.expenses] };
-      const purchaseId = uid();
-      const linkedExpense = { ...expense, purchaseId };
-      const purchase: Purchase = {
-        id: purchaseId,
-        supermarketName: expense.description,
-        startedAt: expense.date,
-        completedAt: expense.date,
-        total: expense.amount,
-        source: "manual",
-        expenseId: expense.id,
-        items: [],
-      };
-      return { ...d, expenses: [linkedExpense, ...d.expenses], purchases: [purchase, ...d.purchases] };
-    });
+    update((current) => saveExpense(current, expense));
     setAdding(false);
     setEditing(undefined);
   };
@@ -238,10 +222,8 @@ function Finances({ data, update, dark, toggleTheme }: { data: AppData; update: 
           remove={
             editing
               ? () => {
-                  update((d) => ({
-                    ...d,
-                    expenses: d.expenses.filter((e) => e.id !== editing.id),
-                  }));
+                  if (!window.confirm("¿Eliminar este gasto y su compra asociada?")) return;
+                  update((current) => deleteExpense(current, editing.id));
                   setEditing(undefined);
                 }
               : undefined

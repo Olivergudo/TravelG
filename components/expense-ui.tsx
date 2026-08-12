@@ -127,13 +127,25 @@ export function QuickExpenseForm({
         onSubmit={submit}
         className={`${embedded ? "space-y-5 rounded-[28px] border border-black/[.04] bg-white p-5" : "sheet max-h-[92vh] w-full max-w-lg space-y-5 overflow-y-auto rounded-t-[30px] bg-white p-5 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:rounded-[30px]"}`}
       >
-        {!embedded && <div className="flex items-center">
+        {!embedded && <div className="flex items-center gap-2">
           <h2 className="flex-1 text-xl font-bold">
-            {expense ? "Editar gasto" : "Registrar gasto"}
+            {expense ? "Gasto" : "Registrar gasto"}
           </h2>
+          {remove && (
+            <button
+              type="button"
+              onClick={remove}
+              aria-label="Eliminar gasto"
+              title="Eliminar gasto"
+              className="grid h-10 w-10 place-items-center rounded-full bg-red-50 text-red-600"
+            >
+              <Trash2 size={18} />
+            </button>
+          )}
           <button
             type="button"
             onClick={close}
+            aria-label="Cerrar"
             className="rounded-full bg-[#f1f4f2] p-2"
           >
             <X size={19} />
@@ -194,15 +206,6 @@ export function QuickExpenseForm({
         <button className="min-h-14 w-full rounded-2xl bg-[#176b46] px-5 font-bold text-white">
           Guardar gasto
         </button>
-        {remove && (
-          <button
-            type="button"
-            onClick={remove}
-            className="flex w-full justify-center gap-2 py-2 text-sm font-semibold text-red-600"
-          >
-            <Trash2 size={17} /> Eliminar gasto
-          </button>
-        )}
       </form>
   );
   if (embedded) return form;
