@@ -1,7 +1,9 @@
 export type Category = {
   id: string;
-  name: string;
+  name?: string;
   color: string;
+  emoji?: string;
+  /** Campo legado; se conserva para sincronizar datos existentes. */
   icon?: string;
 };
 export type Expense = {
@@ -21,6 +23,7 @@ export type PendingProduct = {
   name: string;
   normalizedName: string;
   defaultQuantity: number;
+  checked?: boolean;
   createdAt: string;
   updatedAt: string;
 };

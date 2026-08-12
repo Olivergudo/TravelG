@@ -1,22 +1,39 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   BadgeDollarSign,
   MoreHorizontal,
+  Moon,
   Plus,
-  Search,
-  Settings2,
   ShoppingBasket,
+  Sun,
 } from "lucide-react";
 import { ShoppingV2 } from "./shopping-v2";
-import { CategoryManager, formatMoney, QuickExpenseForm } from "./expense-ui";
+import { ReceiptScanner } from "./receipt-scanner";
+import { categoryEmoji, CategoryManager, formatMoney, QuickExpenseForm } from "./expense-ui";
 import { useAppData } from "@/hooks/use-app-data";
-import type { AppData, Expense } from "@/lib/types";
+import type { AppData, Expense, Purchase } from "@/lib/types";
+import { FinanceCharts, FinanceHeroDonut } from "./finance-charts";
 type Update = (fn: (data: AppData) => AppData) => void;
+const uid = () => globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
 export function AppShell() {
   const { data, update, ready } = useAppData();
   const [tab, setTab] = useState<"finances" | "shopping">("finances");
+  const [theme, setTheme] = useState<"light" | "dark">("light");
+  useEffect(() => {
+    const saved = localStorage.getItem("gasto-listo-theme");
+    const preferred = saved === "dark" || saved === "light"
+      ? saved
+      : window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    const timer = window.setTimeout(() => setTheme(preferred), 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+  const toggleTheme = () => setTheme((current) => {
+    const next = current === "light" ? "dark" : "light";
+    localStorage.setItem("gasto-listo-theme", next);
+    return next;
+  });
   if (!ready)
     return (
       <main className="grid min-h-screen place-items-center text-[#708078]">
@@ -24,13 +41,17 @@ export function AppShell() {
       </main>
     );
   return (
-    <main className="mx-auto min-h-screen max-w-2xl safe-bottom">
+    <main data-theme={theme} className="theme-root mx-auto min-h-screen max-w-2xl bg-[#f3f6f3] safe-bottom sm:shadow-[0_0_40px_rgba(23,61,45,.08)]">
       {tab === "finances" ? (
-        <Finances data={data} update={update} />
+        <Finances data={data} update={update} dark={theme === "dark"} toggleTheme={toggleTheme} />
       ) : (
-        <ShoppingV2 data={data} update={update} />
+        <ShoppingV2
+          data={data}
+          update={update}
+          showFinances={() => setTab("finances")}
+        />
       )}
-      <nav className="fixed bottom-0 left-1/2 z-30 flex w-full max-w-2xl -translate-x-1/2 border-t border-black/5 bg-white/95 px-6 pb-[env(safe-area-inset-bottom)]">
+      <nav className="fixed bottom-0 left-1/2 z-30 flex w-full max-w-2xl -translate-x-1/2 border-t border-black/[.06] bg-white/95 px-5 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl">
         <Nav
           active={tab === "finances"}
           click={() => setTab("finances")}
@@ -61,7 +82,7 @@ function Nav({
   return (
     <button
       onClick={click}
-      className={`flex flex-1 flex-col items-center gap-1 py-3 text-xs ${active ? "text-[#176b46]" : "text-[#819087]"}`}
+      className={`flex min-h-16 flex-1 flex-col items-center justify-center gap-1.5 py-2 text-[13px] font-semibold ${active ? "text-[#176b46]" : "text-[#718078]"}`}
     >
       {icon}
       {label}
@@ -69,12 +90,11 @@ function Nav({
   );
 }
 
-function Finances({ data, update }: { data: AppData; update: Update }) {
+function Finances({ data, update, dark, toggleTheme }: { data: AppData; update: Update; dark: boolean; toggleTheme: () => void }) {
   const [editing, setEditing] = useState<Expense>();
   const [adding, setAdding] = useState(false);
+  const [scanningReceipt, setScanningReceipt] = useState(false);
   const [managingCategories, setManagingCategories] = useState(false);
-  const [filter, setFilter] = useState("all");
-  const [query, setQuery] = useState("");
   const today = new Date();
   const month = data.expenses.filter((e) => {
     const d = new Date(e.date);
@@ -87,15 +107,9 @@ function Finances({ data, update }: { data: AppData; update: Update }) {
   const week = month
     .filter((e) => Date.now() - new Date(e.date).getTime() < 604800000)
     .reduce((n, e) => n + e.amount, 0);
-  const shown = data.expenses
-    .filter(
-      (e) =>
-        (filter === "all" || e.categoryId === filter) &&
-        e.description
-          .toLocaleLowerCase()
-          .includes(query.trim().toLocaleLowerCase()),
-    )
-    .sort((a, b) => b.date.localeCompare(a.date));
+  const shown = [...data.expenses]
+    .sort((a, b) => b.date.localeCompare(a.date))
+    .slice(0, 8);
   const totals = data.categories
     .map((category) => ({
       category,
@@ -105,93 +119,69 @@ function Finances({ data, update }: { data: AppData; update: Update }) {
     }))
     .filter((row) => row.total > 0)
     .sort((a, b) => b.total - a.total);
+  const largestCategoryTotal = totals[0]?.total || 1;
   const save = (expense: Expense) => {
-    update((d) => ({
-      ...d,
-      expenses: editing
-        ? d.expenses.map((e) => (e.id === expense.id ? expense : e))
-        : [expense, ...d.expenses],
-    }));
+    update((d) => {
+      if (editing) return { ...d, expenses: d.expenses.map((e) => (e.id === expense.id ? expense : e)) };
+      if (expense.categoryId !== "supermarket") return { ...d, expenses: [expense, ...d.expenses] };
+      const purchaseId = uid();
+      const linkedExpense = { ...expense, purchaseId };
+      const purchase: Purchase = {
+        id: purchaseId,
+        supermarketName: expense.description,
+        startedAt: expense.date,
+        completedAt: expense.date,
+        total: expense.amount,
+        source: "manual",
+        expenseId: expense.id,
+        items: [],
+      };
+      return { ...d, expenses: [linkedExpense, ...d.expenses], purchases: [purchase, ...d.purchases] };
+    });
     setAdding(false);
     setEditing(undefined);
   };
   return (
     <>
-      <header className="px-5 pb-4 pt-7">
-        <p className="text-xs font-bold uppercase tracking-[.18em] text-[#789087]">
+      <header className="flex items-center px-5 pb-5 pt-[max(2rem,env(safe-area-inset-top))]">
+        <div className="flex-1"><p className="text-[13px] font-bold uppercase tracking-[.18em] text-[#6f8278]">
           Tu dinero
         </p>
-        <h1 className="text-2xl font-bold">Finanzas</h1>
+        <h1 className="mt-1 text-[30px] font-bold leading-tight tracking-[-.02em]">Finanzas</h1>
+        </div>
+        <button onClick={toggleTheme} aria-label={dark ? "Usar tema claro" : "Usar tema oscuro"} className="theme-card grid h-12 w-12 place-items-center rounded-2xl bg-white text-[#176b46] shadow-sm">{dark ? <Sun size={21} /> : <Moon size={21} />}</button>
       </header>
-      <section className="mx-4 rounded-[28px] bg-[#173d2d] p-6 text-white">
-        <p className="text-sm text-white/65">Gastado este mes</p>
-        <p className="mt-2 text-4xl font-bold">{formatMoney(total)}</p>
-        <div className="mt-5 flex gap-6 text-sm">
-          <span>
-            Esta semana <b>{formatMoney(week)}</b>
-          </span>
-          <span>
-            <b>{month.length}</b> gastos
-          </span>
+      <section className="mx-4 rounded-[30px] bg-[#173d2d] p-6 text-white shadow-[0_10px_30px_rgba(23,61,45,.12)]">
+        <FinanceHeroDonut expenses={month} categories={data.categories} total={total} />
+        <div className="mt-6 grid grid-cols-2 gap-3 border-t border-white/10 pt-4">
+          <span className="text-[13px] text-white/65">Esta semana <b className="mt-1 block text-base text-white">{formatMoney(week)}</b></span>
+          <span className="text-[13px] text-white/65">Movimientos <b className="mt-1 block text-base text-white">{month.length} gastos</b></span>
         </div>
       </section>
-      <div className="space-y-5 px-4">
+      <div className="space-y-6 px-4">
         <button
           onClick={() => setAdding(true)}
-          className="mt-4 flex w-full justify-center gap-2 rounded-2xl bg-[#176b46] py-4 font-bold text-white"
+          className="mt-4 flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-[#176b46] px-5 text-base font-bold text-white shadow-[0_7px_18px_rgba(23,107,70,.16)] active:scale-[.99]"
         >
           <Plus /> Nuevo gasto
         </button>
-        <div className="flex justify-end">
-          <button
-            onClick={() => setManagingCategories(true)}
-            className="flex items-center gap-1 text-xs font-semibold text-[#718078]"
-          >
-            <Settings2 size={15} /> Administrar categorías
-          </button>
-        </div>
-        <div className="relative">
-          <Search
-            className="absolute left-4 top-3.5 text-[#829087]"
-            size={19}
-          />
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Buscar gastos…"
-            className="w-full rounded-2xl bg-white py-3 pl-11 pr-4 outline-none"
-          />
-        </div>
-        <div className="overflow-x-auto">
-          <div className="flex min-w-max gap-2">
-            <button
-              onClick={() => setFilter("all")}
-              className={`rounded-full px-4 py-2 text-sm font-semibold ${filter === "all" ? "bg-[#173d2d] text-white" : "bg-white"}`}
-            >
-              Todos
-            </button>
-            {data.categories.map((c) => (
-              <button
-                key={c.id}
-                onClick={() => setFilter(c.id)}
-                className={`rounded-full px-4 py-2 text-sm font-semibold ${filter === c.id ? "bg-[#173d2d] text-white" : "bg-white"}`}
-              >
-                {c.icon} {c.name}
-              </button>
-            ))}
-          </div>
-        </div>
+        <FinanceCharts expenses={month} categories={data.categories} total={total} dark={dark} showDistribution={false} />
         <section>
-          <h2 className="mb-3 text-lg font-bold">Por categoría</h2>
-          <div className="overflow-hidden rounded-3xl bg-white">
+          <h2 className="mb-3 text-xl font-bold tracking-[-.01em]">Por categoría</h2>
+          <div className="overflow-hidden rounded-[26px] border border-black/[.04] bg-white">
             {totals.map(({ category, total }) => (
               <button
                 key={category.id}
-                onClick={() => setFilter(category.id)}
-                className="flex w-full items-center border-b border-black/5 p-4 text-left last:border-0"
+                type="button"
+                className="flex min-h-[68px] w-full items-center border-b border-black/5 px-4 py-3 text-left last:border-0"
               >
-                <span className="mr-3 text-xl">{category.icon}</span>
-                <b className="flex-1">{category.name}</b>
+                <span className="mr-3 text-2xl">{categoryEmoji(category)}</span>
+                <span className="min-w-0 flex-1 pr-3">
+                  {category.name && <b className="block truncate">{category.name}</b>}
+                  <span className="mt-1.5 block h-1.5 overflow-hidden rounded-full bg-[#dfe8e2]">
+                    <span className="block h-full rounded-full bg-[#2f9d68]" style={{ width: `${Math.max(5, total / largestCategoryTotal * 100)}%` }} />
+                  </span>
+                </span>
                 <b>{formatMoney(total)}</b>
               </button>
             ))}
@@ -203,21 +193,21 @@ function Finances({ data, update }: { data: AppData; update: Update }) {
           </div>
         </section>
         <section>
-          <h2 className="mb-3 text-lg font-bold">Movimientos</h2>
-          <div className="overflow-hidden rounded-3xl bg-white">
+          <h2 className="mb-3 text-xl font-bold tracking-[-.01em]">Movimientos recientes</h2>
+          <div className="overflow-hidden rounded-[26px] border border-black/[.04] bg-white">
             {shown.map((e) => {
               const c = data.categories.find((x) => x.id === e.categoryId);
               return (
                 <button
                   key={e.id}
                   onClick={() => setEditing(e)}
-                  className="flex w-full items-center gap-3 border-b border-black/5 p-4 text-left last:border-0"
+                  className="flex min-h-[76px] w-full items-center gap-3 border-b border-black/5 px-4 py-3.5 text-left last:border-0"
                 >
-                  <span className="text-xl">{c?.icon || "•••"}</span>
+                  <span className="text-2xl">{categoryEmoji(c)}</span>
                   <span className="min-w-0 flex-1">
-                    <b className="block truncate">{e.description}</b>
-                    <small className="text-[#809087]">
-                      {c?.name || "Sin categoría"} ·{" "}
+                    <b className="block truncate text-[15px]">{e.description}</b>
+                    <small className="mt-1 block text-[13px] text-[#718078]">
+                      {c?.name ? `${c.name} · ` : ""}
                       {new Date(e.date).toLocaleDateString("es-CL")}
                     </small>
                   </span>
@@ -243,6 +233,8 @@ function Finances({ data, update }: { data: AppData; update: Update }) {
             setEditing(undefined);
           }}
           save={save}
+          onScanReceipt={() => setScanningReceipt(true)}
+          onManageCategories={() => setManagingCategories(true)}
           remove={
             editing
               ? () => {
@@ -254,6 +246,17 @@ function Finances({ data, update }: { data: AppData; update: Update }) {
                 }
               : undefined
           }
+        />
+      )}
+      {scanningReceipt && (
+        <ReceiptScanner
+          data={data}
+          update={update}
+          close={() => setScanningReceipt(false)}
+          completed={() => {
+            setAdding(false);
+            setEditing(undefined);
+          }}
         />
       )}
       {managingCategories && (

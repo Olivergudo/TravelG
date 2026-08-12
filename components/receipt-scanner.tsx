@@ -30,10 +30,12 @@ export function ReceiptScanner({
   data,
   update,
   close,
+  completed,
 }: {
   data: AppData;
   update: Update;
   close: () => void;
+  completed?: () => void;
 }) {
   const [file, setFile] = useState<File>();
   const [preview, setPreview] = useState("");
@@ -72,10 +74,6 @@ export function ReceiptScanner({
         throw new Error(`${base}${detail}`);
       }
       const scanned = json as ScannedReceipt;
-      scanned.items = scanned.items.map((i) => ({
-        ...i,
-        matchedPendingProductId: suggest(i.displayName, data),
-      }));
       setReceipt(scanned);
     } catch (e) {
       setError(e instanceof Error ? e.message : "No pudimos leer este ticket.");
@@ -96,7 +94,6 @@ export function ReceiptScanner({
     const items: PurchaseItem[] = receipt.items.map((i) => ({
       id: uid(),
       purchaseId,
-      sourcePendingProductId: i.matchedPendingProductId,
       productName: i.displayName.trim(),
       rawProductName: i.rawName,
       normalizedName: normalize(i.displayName),
@@ -116,9 +113,6 @@ export function ReceiptScanner({
       items,
     };
     update((d) => {
-      const matched = new Set(
-        items.map((i) => i.sourcePendingProductId).filter(Boolean),
-      );
       const expense = expenseId
         ? {
             id: expenseId,
@@ -135,20 +129,20 @@ export function ReceiptScanner({
         : undefined;
       return {
         ...d,
-        pendingProducts: d.pendingProducts.filter((p) => !matched.has(p.id)),
         purchases: [purchase, ...d.purchases],
         expenses: expense ? [expense, ...d.expenses] : d.expenses,
       };
     });
+    completed?.();
     close();
   };
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-[#f5f7f5]">
-      <header className="sticky top-0 z-10 flex items-center bg-white p-4">
+      <header className="sticky top-0 z-10 flex min-h-16 items-center border-b border-black/[.04] bg-white/95 p-4 backdrop-blur-xl">
         <h1 className="flex-1 text-xl font-bold">
           {receipt ? "Revisar ticket" : "Escanear ticket"}
         </h1>
-        <button onClick={close}>
+        <button onClick={close} className="grid h-11 w-11 place-items-center rounded-full bg-[#f1f4f2]">
           <X />
         </button>
       </header>
@@ -180,7 +174,7 @@ export function ReceiptScanner({
             <button
               disabled={!file || loading}
               onClick={analyze}
-              className="flex w-full justify-center gap-2 rounded-2xl bg-[#176b46] py-4 font-bold text-white disabled:opacity-40"
+              className="flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-[#176b46] px-5 font-bold text-white disabled:opacity-40"
             >
               {loading ? (
                 <>
@@ -201,7 +195,7 @@ export function ReceiptScanner({
           </>
         )}
         {receipt && (
-          <Review receipt={receipt} setReceipt={setReceipt} data={data} />
+          <Review receipt={receipt} setReceipt={setReceipt} />
         )}{" "}
         {receipt && (
           <>
@@ -229,16 +223,10 @@ export function ReceiptScanner({
               />
             </div>
             <button
-              onClick={() => confirm(false)}
-              className="w-full rounded-2xl bg-[#173d2d] py-4 font-bold text-white"
-            >
-              Guardar sólo el ticket
-            </button>
-            <button
               onClick={() => confirm(true)}
-              className="w-full rounded-2xl bg-[#176b46] py-4 font-bold text-white"
+              className="min-h-14 w-full rounded-2xl bg-[#176b46] px-5 font-bold text-white"
             >
-              Guardar ticket y enviar a Finanzas
+              Confirmar ticket y guardar gasto
             </button>
           </>
         )}
@@ -249,11 +237,9 @@ export function ReceiptScanner({
 function Review({
   receipt,
   setReceipt,
-  data,
 }: {
   receipt: ScannedReceipt;
   setReceipt: (r: ScannedReceipt) => void;
-  data: AppData;
 }) {
   const change = (id: string, patch: Partial<ScannedReceiptItem>) =>
     setReceipt({
@@ -349,25 +335,6 @@ function Review({
               />
             </label>
           </div>
-          <label className="block text-xs text-[#718078]">
-            Vincular con pendiente
-            <select
-              value={item.matchedPendingProductId || ""}
-              onChange={(e) =>
-                change(item.id, {
-                  matchedPendingProductId: e.target.value || undefined,
-                })
-              }
-              className="mt-1 w-full rounded-xl bg-[#edf3ef] p-3 text-sm text-[#17231d]"
-            >
-              <option value="">No quitar de pendientes</option>
-              {data.pendingProducts.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-          </label>
         </div>
       ))}
       <button
@@ -404,24 +371,6 @@ function Review({
       </label>
     </>
   );
-}
-function suggest(name: string, data: AppData) {
-  const scanTokens = new Set(
-    normalize(name)
-      .split(/\s+/)
-      .filter((x) => x.length > 2),
-  );
-  let best: { id: string; score: number } | undefined;
-  for (const pending of data.pendingProducts) {
-    const tokens = normalize(pending.name)
-        .split(/\s+/)
-        .filter((x) => x.length > 2),
-      hits = tokens.filter((x) => scanTokens.has(x)).length,
-      score = tokens.length ? hits / tokens.length : 0;
-    if (score >= 0.75 && (!best || score > best.score))
-      best = { id: pending.id, score };
-  }
-  return best?.id;
 }
 async function compress(file: File) {
   if (file.size < 2_000_000) return file;

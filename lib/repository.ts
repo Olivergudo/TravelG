@@ -1,4 +1,5 @@
-import type { AppData, PendingProduct, Purchase, PurchaseItem } from "./types";
+import type { AppData, Category, PendingProduct, Purchase, PurchaseItem } from "./types";
+import { isSupabaseConfigured, supabase } from "./supabase";
 const KEY = "gasto-listo-data-v1";
 export const defaultCategories = [
   { id: "supermarket", name: "Supermercado", color: "#2f9d68", icon: "🛒" },
@@ -76,7 +77,19 @@ function migrate(value: unknown): AppData {
     Array.isArray(old.pendingProducts) &&
     Array.isArray(old.purchases)
   ) {
-    return { ...emptyData, ...old } as AppData;
+    return {
+      ...emptyData,
+      ...old,
+      categories: (old.categories || defaultCategories).map((value) => {
+        const category = value as Category;
+        return {
+          ...category,
+          name: category.name || "",
+          emoji: category.emoji || category.icon || "💸",
+          icon: category.emoji || category.icon || "💸",
+        };
+      }),
+    } as AppData;
   }
   if (Array.isArray(old.pendingProducts) && Array.isArray(old.purchases)) {
     const existing = Array.isArray(old.categories) ? old.categories : [];
@@ -178,4 +191,87 @@ export class LocalRepository implements DataRepository {
     localStorage.setItem(KEY, JSON.stringify(data));
   }
 }
-export const repository = new LocalRepository();
+
+class SupabaseRepository implements DataRepository {
+  private local = new LocalRepository();
+  private saveQueue: Promise<void> = Promise.resolve();
+
+  private async userId() {
+    if (!supabase) throw new Error("Supabase no está configurado");
+
+    const { data: sessionData } = await supabase.auth.getSession();
+    if (sessionData.session?.user.id) return sessionData.session.user.id;
+
+    const { data, error } = await supabase.auth.signInAnonymously();
+    if (error || !data.user) {
+      throw error ?? new Error("No se pudo iniciar la sesión anónima");
+    }
+    return data.user.id;
+  }
+
+  async load(): Promise<AppData> {
+    if (!supabase) return this.local.load();
+
+    const userId = await this.userId();
+    const { data, error } = await supabase.rpc("load_app_data");
+
+    if (error) throw error;
+    if (data) {
+      const remote = migrate(data);
+      const local = await this.local.load();
+      const localChecked = new Map(
+        local.pendingProducts.map((product) => [product.id, product.checked]),
+      );
+      return {
+        ...remote,
+        pendingProducts: remote.pendingProducts.map((product) => ({
+          ...product,
+          checked: product.checked ?? localChecked.get(product.id) ?? false,
+        })),
+      };
+    }
+
+    // Primera conexión: sube automáticamente los datos existentes del navegador.
+    const { data: legacy } = await supabase
+      .from("app_data")
+      .select("data")
+      .eq("user_id", userId)
+      .maybeSingle();
+    const initialData = legacy?.data
+      ? migrate(legacy.data)
+      : await this.local.load();
+    await this.write(initialData);
+    return initialData;
+  }
+
+  async save(data: AppData): Promise<void> {
+    // Serializa las escrituras para que una actualización lenta no pise a la nueva.
+    this.saveQueue = this.saveQueue
+      .catch(() => undefined)
+      .then(async () => {
+        await this.userId();
+        await this.write(data);
+        await this.local.save(data);
+      });
+    return this.saveQueue;
+  }
+
+  private async write(data: AppData) {
+    if (!supabase) return;
+    const payload: AppData = {
+      ...data,
+      categories: data.categories.map((category) => ({
+        ...category,
+        name: category.name || "",
+        emoji: category.emoji || category.icon || "💸",
+        icon: category.emoji || category.icon || "💸",
+      })),
+    };
+    const { error } = await supabase.rpc("save_app_data", { payload });
+    if (error) throw error;
+  }
+}
+
+export const repository: DataRepository = isSupabaseConfigured
+  ? new SupabaseRepository()
+  : new LocalRepository();
