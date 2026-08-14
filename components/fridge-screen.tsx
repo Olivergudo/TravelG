@@ -32,6 +32,7 @@ import { savedRecipeRepository } from "@/lib/recipes/saved-repository";
 import { recipeFingerprint, type SavedRecipe } from "@/lib/recipes/saved-types";
 import { recipeAsText, recipePdf } from "@/lib/recipes/share";
 import { shareOrDownloadPdf } from "@/lib/pdf/share";
+import { useI18n } from "@/lib/i18n";
 
 type Update = (fn: (data: AppData) => AppData) => void;
 const uid = () => crypto.randomUUID();
@@ -51,6 +52,7 @@ export function FridgeScreen({
   canCook: boolean;
   openShoppingList: () => void;
 }) {
+  const { t, count, language } = useI18n();
   const [items, setItems] = useState<FridgeItem[]>(() =>
     fridgeRepository.local(userId),
   );
@@ -232,6 +234,7 @@ export function FridgeScreen({
     try {
       const generated = await RecipeService.generate({
           ...options,
+          language,
           availableIngredients: items.map(({ name, quantity, unit }) => ({ name, quantity, unit })),
         });
       if (generated.status === "insufficient_ingredients") {
@@ -258,13 +261,13 @@ export function FridgeScreen({
     <>
       <header className={`${inventorySearchFocused ? "max-sm:hidden" : ""} px-5 pb-5 pt-[max(2rem,env(safe-area-inset-top))]`}>
         <p className="text-[13px] font-bold uppercase tracking-[.18em] text-[#6f8278]">
-          Inventario
+          {t("fridge.inventory")}
         </p>
         <h1 className="mt-1 text-[30px] font-bold leading-tight">
-          Refrigerador
+          {t("fridge.title")}
         </h1>
         <p className="mt-1 text-sm text-[#718078]">
-          {items.length} {items.length === 1 ? "producto" : "productos"}
+          {count("fridge.product", items.length)}
         </p>
       </header>
       <div className={`space-y-5 px-4 pb-32 ${inventorySearchFocused ? "max-sm:pt-[max(1rem,env(safe-area-inset-top))]" : ""}`}>
@@ -277,8 +280,8 @@ export function FridgeScreen({
             value={quickName}
             onChange={(event) => setQuickName(event.target.value)}
             enterKeyHint="done"
-            placeholder="Agregar producto..."
-            aria-label="Nombre del producto"
+            placeholder={t("fridge.addPlaceholder")}
+            aria-label={t("fridge.addPlaceholder")}
             className="min-h-12 min-w-0 flex-1 bg-transparent px-3 text-base outline-none"
           />
           <button
@@ -305,7 +308,7 @@ export function FridgeScreen({
             className="theme-card tap flex min-h-12 min-w-0 items-center justify-center gap-2 rounded-2xl border border-black/[.06] bg-white px-2 font-semibold text-[#176b46]"
           >
             <ScanBarcode className="shrink-0" size={20} />
-            <span className="truncate">Escanear código</span>
+            <span className="truncate">{t("fridge.scan")}</span>
           </button>
           )}
           {canCook && (
@@ -328,7 +331,7 @@ export function FridgeScreen({
             ) : (
               <Sparkles />
             )}
-            Cocinar
+            {t("fridge.cook")}
           </button>
           )}
         </div>}
@@ -338,7 +341,7 @@ export function FridgeScreen({
           className={`${inventorySearchFocused ? "max-sm:hidden" : ""} theme-card flex min-h-16 w-full min-w-0 items-center gap-3 rounded-[20px] border border-black/[.06] bg-white px-4 text-left shadow-sm`}
         >
           <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#e3f2e9] text-[#176b46]"><ListChecks size={20}/></span>
-          <span className="min-w-0 flex-1"><b className="block truncate text-[15px]">Lista de compras</b><small className="block text-[13px] text-[#718078]">{pendingShoppingItems === 0 ? "Sin pendientes" : `${pendingShoppingItems} ${pendingShoppingItems === 1 ? "pendiente" : "pendientes"}`}</small></span>
+          <span className="min-w-0 flex-1"><b className="block truncate text-[15px]">{t("fridge.shoppingList")}</b><small className="block text-[13px] text-[#718078]">{pendingShoppingItems === 0 ? t("fridge.noPending") : count("fridge.pending", pendingShoppingItems)}</small></span>
           {pendingShoppingItems > 0 && <span className="h-2 w-2 shrink-0 rounded-full bg-[#4fc187]" aria-hidden="true"/>}
           <ChevronRight className="shrink-0 text-[#91a098]" size={20}/>
         </button>
@@ -353,28 +356,28 @@ export function FridgeScreen({
         {looking && (
           <p className="flex items-center justify-center gap-2 py-5 text-[#718078]">
             <LoaderCircle className="animate-spin" />
-            Buscando producto…
+            {t("fridge.searching")}
           </p>
         )}
         {!items.length && !looking ? (
           <div className="theme-card rounded-[26px] bg-white px-6 py-12 text-center">
             <PackageOpen className="mx-auto text-[#91a098]" size={42} />
             <h2 className="mt-3 text-lg font-bold">
-              Tu refrigerador está vacío
+              {t("fridge.empty")}
             </h2>
             <p className="mt-1 text-sm text-[#718078]">
-              Agrega productos o escanea su código.
+              {t("fridge.emptyHint")}
             </p>
           </div>
         ) : (
           <section className="space-y-3">
             <h2 className="px-1 text-xs font-bold uppercase tracking-[.14em] text-[#718078]">
-              Disponibles
+              {t("fridge.available")}
             </h2>
             <div className="flex w-full min-w-0 gap-2">
               <label className="theme-card flex min-w-0 flex-1 items-center gap-2 rounded-2xl border border-black/[.04] bg-white px-3">
                 <Search className="shrink-0 text-[#718078]" size={18} />
-                <input type="search" value={inventorySearch} onFocus={() => { setInventorySearchFocused(true); window.setTimeout(() => window.scrollTo({ top: 0, behavior: "smooth" }), 80); }} onBlur={() => window.setTimeout(() => setInventorySearchFocused(false), 120)} onChange={(event) => setInventorySearch(event.target.value)} placeholder="Buscar alimento..." aria-label="Buscar alimento" className="min-h-11 min-w-0 flex-1 bg-transparent text-[16px] outline-none" />
+                <input type="search" value={inventorySearch} onFocus={() => { setInventorySearchFocused(true); window.setTimeout(() => window.scrollTo({ top: 0, behavior: "smooth" }), 80); }} onBlur={() => window.setTimeout(() => setInventorySearchFocused(false), 120)} onChange={(event) => setInventorySearch(event.target.value)} placeholder={t("fridge.search")} aria-label={t("fridge.search")} className="min-h-11 min-w-0 flex-1 bg-transparent text-[16px] outline-none" />
               </label>
               <button type="button" onClick={() => setFilterOpen(true)} aria-label="Filtrar alimentos" className={`relative grid h-11 w-11 shrink-0 place-items-center rounded-2xl border text-xl font-bold leading-none ${inventoryFilter === "all" ? "theme-card border-black/[.06] bg-white" : "border-[#4fc187] bg-[#173c2b] text-[#62d196]"}`}>
                 ⋯
@@ -575,21 +578,22 @@ function InventoryFilterSheet({
   close: () => void;
   select: (value: "all" | FoodFilterCategory) => void;
 }) {
+  const { t } = useI18n();
   const options: Array<{ value: "all" | FoodFilterCategory; label: string }> = [
-    { value: "all", label: "Todos" },
-    { value: "produce", label: "🥬 Frutas y verduras" },
-    { value: "meat", label: "🥩 Carnes" },
-    { value: "dairy", label: "🧀 Lácteos" },
-    { value: "bakery", label: "🍞 Pan y cereales" },
-    { value: "seasoning", label: "🧂 Condimentos" },
-    { value: "drink", label: "🥤 Bebidas" },
-    { value: "other", label: "🍴 Otros" },
+    { value: "all", label: t("fridge.filterAll") },
+    { value: "produce", label: `🥬 ${t("fridge.filterProduce")}` },
+    { value: "meat", label: `🥩 ${t("fridge.filterMeat")}` },
+    { value: "dairy", label: `🧀 ${t("fridge.filterDairy")}` },
+    { value: "bakery", label: `🍞 ${t("fridge.filterBakery")}` },
+    { value: "seasoning", label: `🧂 ${t("fridge.filterSeasoning")}` },
+    { value: "drink", label: `🥤 ${t("fridge.filterDrink")}` },
+    { value: "other", label: `🍴 ${t("fridge.filterOther")}` },
   ];
   return (
     <div className="fixed inset-0 z-[85] flex items-end justify-center bg-black/50 sm:items-center">
       <section className="theme-card w-full max-w-lg rounded-t-[30px] bg-white p-5 safe-bottom sm:rounded-[30px]">
         <div className="flex items-center gap-3">
-          <h2 className="flex-1 text-xl font-bold">Filtrar alimentos</h2>
+          <h2 className="flex-1 text-xl font-bold">{t("fridge.filter")}</h2>
           <button onClick={close} aria-label="Cerrar filtros" className="grid h-11 w-11 place-items-center rounded-full bg-[#edf2ee]"><X /></button>
         </div>
         <div className="mt-4 grid grid-cols-1 gap-1">
@@ -734,17 +738,19 @@ function RecipePrompt({
   saveRecipe: (recipe: RecipeSuggestion) => Promise<void>;
   shareRecipe: (recipe: RecipeSuggestion) => void;
 }) {
+  const { t } = useI18n();
   const [mealType, setMealType] = useState<"desayuno" | "comida" | "cena" | null>(null);
   const [preferences, setPreferences] = useState<string[]>([]);
   const [craving, setCraving] = useState("");
   const [ingredientMode, setIngredientMode] = useState<"available_only" | "allow_extras">("available_only");
   const [savingRecipe, setSavingRecipe] = useState(false);
   const options = [
-    ["rapido", "⚡ Rápido"],
-    ["saludable", "🥗 Saludable"],
-    ["economico", "💰 Económico"],
-    ["sorprendeme", "🎲 Sorpréndeme"],
+    ["rapido", `⚡ ${t("recipes.fast")}`],
+    ["saludable", `🥗 ${t("recipes.healthy")}`],
+    ["economico", `💰 ${t("recipes.cheap")}`],
+    ["sorprendeme", `🎲 ${t("recipes.surprise")}`],
   ];
+  const mealLabels = { desayuno: t("recipes.breakfast"), comida: t("recipes.lunch"), cena: t("recipes.dinner") };
   const togglePreference = (value: string) => {
     if (value === "sorprendeme") return setPreferences([value]);
     setPreferences((current) => {
@@ -759,7 +765,7 @@ function RecipePrompt({
   if (loading) return (
     <RecipeFlowFrame close={close}>
       <div className="grid min-h-64 place-items-center text-center">
-        <div><LoaderCircle className="mx-auto animate-spin text-[#62d196]" size={34} /><h2 className="mt-4 text-xl font-bold">Generando recetas...</h2><p className="mt-1 text-sm text-[#718078]">Estamos combinando lo que tienes.</p></div>
+        <div><LoaderCircle className="mx-auto animate-spin text-[#62d196]" size={34} /><h2 className="mt-4 text-xl font-bold">{t("recipes.generating")}</h2><p className="mt-1 text-sm text-[#718078]">{t("recipes.generatingHint")}</p></div>
       </div>
     </RecipeFlowFrame>
   );
@@ -768,10 +774,10 @@ function RecipePrompt({
       <button onClick={backFromRecipe} className="mb-4 min-h-11 font-semibold text-[#176b46]">← Volver</button>
       <h2 className="text-2xl font-bold">{selectedRecipe.title}</h2>
       {selectedRecipe.estimatedMinutes && <p className="mt-1 text-sm font-semibold text-[#176b46]">{selectedRecipe.estimatedMinutes} min</p>}
-      <h3 className="mt-5 font-bold">Ingredientes que tienes</h3>
+      <h3 className="mt-5 font-bold">{t("recipes.ingredients")}</h3>
       <ul className="mt-2 space-y-1 text-sm">{selectedRecipe.ingredients.map((ingredient) => <li key={ingredient}>✓ {ingredient}</li>)}</ul>
-      {selectedRecipe.missingIngredients.length > 0 && <><h3 className="mt-5 font-bold">Necesitas comprar</h3><div className="mt-2 flex flex-wrap gap-2">{selectedRecipe.missingIngredients.map((ingredient) => <button key={ingredient} onClick={() => addShopping(ingredient)} className="rounded-full border border-[#176b46] px-3 py-1.5 text-sm font-semibold text-[#176b46]">+ {ingredient}</button>)}</div></>}
-      <h3 className="mt-5 font-bold">Preparación</h3>
+      {selectedRecipe.missingIngredients.length > 0 && <><h3 className="mt-5 font-bold">{t("recipes.needBuy")}</h3><div className="mt-2 flex flex-wrap gap-2">{selectedRecipe.missingIngredients.map((ingredient) => <button key={ingredient} onClick={() => addShopping(ingredient)} className="rounded-full border border-[#176b46] px-3 py-1.5 text-sm font-semibold text-[#176b46]">+ {ingredient}</button>)}</div></>}
+      <h3 className="mt-5 font-bold">{t("recipes.preparation")}</h3>
       <ol className="mt-2 list-decimal space-y-2 pl-5 text-sm">{selectedRecipe.steps.map((step, index) => <li key={index}>{step}</li>)}</ol>
       <div className="mt-6 grid grid-cols-2 gap-2">
         <button
@@ -784,18 +790,18 @@ function RecipePrompt({
           className="flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-[#e6f3ec] px-3 font-semibold text-[#176b46] disabled:opacity-70"
         >
           <Heart size={19} fill={savedRecipes.some((recipe) => recipe.fingerprint === recipeFingerprint(selectedRecipe)) ? "currentColor" : "none"} />
-          {savedRecipes.some((recipe) => recipe.fingerprint === recipeFingerprint(selectedRecipe)) ? "Guardada" : savingRecipe ? "Guardando..." : "Guardar"}
+          {savedRecipes.some((recipe) => recipe.fingerprint === recipeFingerprint(selectedRecipe)) ? t("recipes.saved") : savingRecipe ? t("common.loading") : t("recipes.save")}
         </button>
         <button onClick={() => shareRecipe(selectedRecipe)} className="flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-[#176b46] px-3 font-semibold text-[#176b46]">
           <Share2 size={19} /> Compartir
         </button>
       </div>
-      <button onClick={backFromRecipe} className="mt-6 min-h-12 w-full rounded-2xl bg-[#176b46] font-semibold text-white">Volver a opciones</button>
+      <button onClick={backFromRecipe} className="mt-6 min-h-12 w-full rounded-2xl bg-[#176b46] font-semibold text-white">{t("recipes.backOptions")}</button>
     </RecipeFlowFrame>
   );
   if (recipes?.length) return (
     <RecipeFlowFrame close={close}>
-      <div className="flex items-center justify-between gap-3"><p className="text-xs font-bold uppercase tracking-[.16em] text-[#176b46]">Recetas con IA</p><button onClick={openSaved} className="flex min-h-10 items-center gap-2 rounded-full bg-[#e6f3ec] px-3 text-sm font-semibold text-[#176b46]"><BookHeart size={17} /> Mis recetas</button></div>
+      <div className="flex items-center justify-between gap-3"><p className="text-xs font-bold uppercase tracking-[.16em] text-[#176b46]">{t("recipes.title")}</p><button onClick={openSaved} className="flex min-h-10 items-center gap-2 rounded-full bg-[#e6f3ec] px-3 text-sm font-semibold text-[#176b46]"><BookHeart size={17} /> {t("recipes.saved")}</button></div>
       <h2 className="mt-1 text-2xl font-bold">{recipes.length} {recipes.length === 1 ? "idea" : "ideas"} para tu {mealType}</h2>
       <div className="mt-4 space-y-3">{recipes.map((recipe) => <article key={recipe.title} className="rounded-2xl border border-black/10 p-4"><div className="flex items-start gap-3"><div className="min-w-0 flex-1"><h3 className="font-bold">{recipe.title}</h3><p className="mt-1 text-sm text-[#718078]">{recipe.reason || recipe.description}</p></div>{recipe.estimatedMinutes && <span className="shrink-0 text-xs font-semibold text-[#176b46]">{recipe.estimatedMinutes} min</span>}</div><button onClick={() => view(recipe)} className="mt-3 min-h-11 w-full rounded-xl border border-[#176b46] font-semibold text-[#176b46]">Ver receta</button></article>)}</div>
       <button onClick={changePreferences} className="mt-4 min-h-12 w-full font-semibold text-[#176b46]">← Cambiar preferencias</button>
@@ -821,7 +827,7 @@ function RecipePrompt({
         <div className="flex items-start">
           <div className="flex-1">
             <p className="text-xs font-bold uppercase tracking-[.16em] text-[#176b46]">
-              Recetas con IA
+              {t("recipes.title")}
             </p>
           </div>
           <button
@@ -834,30 +840,30 @@ function RecipePrompt({
           </button>
         </div>
         <button onClick={openSaved} className="mt-2 flex min-h-11 items-center gap-2 rounded-full bg-[#e6f3ec] px-4 text-sm font-semibold text-[#176b46]">
-          <BookHeart size={18} /> Mis recetas {savedRecipes.length ? `(${savedRecipes.length})` : ""}
+          <BookHeart size={18} /> {t("recipes.saved")} {savedRecipes.length ? `(${savedRecipes.length})` : ""}
         </button>
         <fieldset className="mt-3">
-          <legend className="font-bold">¿Qué quieres preparar?</legend>
+          <legend className="font-bold">{t("recipes.whatMeal")}</legend>
           <div className="mt-2 grid grid-cols-3 gap-2">
-            {(["desayuno", "comida", "cena"] as const).map((value) => <button key={value} type="button" onClick={() => setMealType(value)} className={`min-h-11 min-w-0 rounded-xl border px-1 text-sm font-semibold capitalize ${mealType === value ? "border-[#176b46] bg-[#e6f3ec] text-[#176b46]" : "border-black/10"}`}>{value}</button>)}
+            {(["desayuno", "comida", "cena"] as const).map((value) => <button key={value} type="button" onClick={() => setMealType(value)} className={`min-h-11 min-w-0 rounded-xl border px-1 text-sm font-semibold ${mealType === value ? "border-[#176b46] bg-[#e6f3ec] text-[#176b46]" : "border-black/10"}`}>{mealLabels[value]}</button>)}
           </div>
         </fieldset>
         <fieldset className="mt-5">
-          <legend className="font-bold">¿Qué prefieres?</legend>
+          <legend className="font-bold">{t("recipes.whatPrefer")}</legend>
           <div className="mt-2 grid grid-cols-2 gap-2">
             {options.map(([value, label]) => <button key={value} type="button" onClick={() => togglePreference(value)} className={`min-h-11 min-w-0 rounded-xl border px-2 text-sm font-semibold ${preferences.includes(value) ? "border-[#176b46] bg-[#e6f3ec] text-[#176b46]" : "border-black/10"}`}>{label}</button>)}
           </div>
-          <p className="mt-1 text-xs text-[#718078]">Elige una o hasta dos opciones.</p>
+          <p className="mt-1 text-xs text-[#718078]">{t("recipes.chooseOptions")}</p>
         </fieldset>
         <label className="mt-5 block font-bold">
-          ¿Qué se te antoja? <span className="font-normal text-[#718078]">(opcional)</span>
-          <input value={craving} onChange={(e) => setCraving(e.target.value)} placeholder="Ej. algo con pollo, pasta cremosa, algo fresco..." className="mt-2 min-h-12 w-full rounded-xl border border-black/10 bg-transparent px-3 text-base font-normal outline-none focus:border-[#176b46]" />
+          {t("recipes.craving")} <span className="font-normal text-[#718078]">({t("recipes.optional")})</span>
+          <input value={craving} onChange={(e) => setCraving(e.target.value)} placeholder={t("recipes.cravingExample")} className="mt-2 min-h-12 w-full rounded-xl border border-black/10 bg-transparent px-3 text-base font-normal outline-none focus:border-[#176b46]" />
         </label>
         <fieldset className="mt-5">
-          <legend className="font-bold">¿Qué ingredientes puedo usar?</legend>
+          <legend className="font-bold">{t("recipes.allowedIngredients")}</legend>
           <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
-            <button type="button" onClick={() => setIngredientMode("available_only")} className={`min-h-11 rounded-xl border px-3 text-sm font-semibold ${ingredientMode === "available_only" ? "border-[#176b46] bg-[#e6f3ec] text-[#176b46]" : "border-black/10"}`}>✅ Solo lo que tengo</button>
-            <button type="button" onClick={() => setIngredientMode("allow_extras")} className={`min-h-11 rounded-xl border px-3 text-sm font-semibold ${ingredientMode === "allow_extras" ? "border-[#176b46] bg-[#e6f3ec] text-[#176b46]" : "border-black/10"}`}>➕ Puedo comprar algo extra</button>
+            <button type="button" onClick={() => setIngredientMode("available_only")} className={`min-h-11 rounded-xl border px-3 text-sm font-semibold ${ingredientMode === "available_only" ? "border-[#176b46] bg-[#e6f3ec] text-[#176b46]" : "border-black/10"}`}>✅ {t("recipes.onlyAvailable")}</button>
+            <button type="button" onClick={() => setIngredientMode("allow_extras")} className={`min-h-11 rounded-xl border px-3 text-sm font-semibold ${ingredientMode === "allow_extras" ? "border-[#176b46] bg-[#e6f3ec] text-[#176b46]" : "border-black/10"}`}>➕ {t("recipes.allowExtras")}</button>
           </div>
         </fieldset>
         <button
@@ -866,7 +872,7 @@ function RecipePrompt({
           className="mt-5 flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-[#176b46] font-semibold text-white disabled:opacity-40"
         >
           {loading && <LoaderCircle className="animate-spin" size={19} />}
-          {loading ? "Generando recetas..." : "Generar recetas"}
+          {loading ? t("recipes.generating") : t("recipes.generate")}
         </button>
       </section>
     </div>

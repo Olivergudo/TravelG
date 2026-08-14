@@ -4,6 +4,7 @@ import { Camera, GripVertical, Trash2, X } from "lucide-react";
 import type { Category, Expense } from "@/lib/types";
 import { categoryPalette, getCategoryBorderColor, getCategoryColor, getCategorySoftColor } from "@/lib/category-colors";
 import { formatCurrency } from "@/lib/currency";
+import { type TranslationKey, useI18n } from "@/lib/i18n";
 
 const uid = () =>
   globalThis.crypto?.randomUUID?.() ??
@@ -20,12 +21,19 @@ const commonEmojis = [
 export const categoryEmoji = (category?: Category) =>
   category?.emoji || category?.icon || "💸";
 
+const defaultCategoryIds = new Set(["supermarket", "transport", "restaurant", "nightlife", "home", "shopping", "entertainment", "health", "other"]);
+export const categoryName = (category: Category | undefined, t: (key: TranslationKey) => string) =>
+  category && defaultCategoryIds.has(category.id)
+    ? t(`category.${category.id}` as TranslationKey)
+    : category?.name || t("category.other");
+
 export function CategoryPicker({ categories, value, onChange, recentIds = [] }: {
   categories: Category[];
   value: string;
   onChange: (id: string) => void;
   recentIds?: string[];
 }) {
+  const { t } = useI18n();
   const ordered = [
     ...recentIds.map((id) => categories.find((category) => category.id === id))
       .filter((category): category is Category => Boolean(category)),
@@ -37,13 +45,13 @@ export function CategoryPicker({ categories, value, onChange, recentIds = [] }: 
         <button
           type="button"
           key={category.id}
-          aria-label={`Categoría ${category.name || categoryEmoji(category)}`}
+          aria-label={`${t("expense.category")} ${categoryName(category, t)}`}
           onClick={() => onChange(category.id)}
           style={value === category.id ? { backgroundColor: getCategorySoftColor(category), borderColor: getCategoryBorderColor(category), boxShadow: `inset 0 0 0 1px ${getCategoryBorderColor(category)}` } : undefined}
           className={`relative flex min-h-[68px] min-w-0 flex-col items-center justify-center rounded-2xl border px-1 py-2 transition ${value === category.id ? "scale-[1.03]" : "border-black/5 bg-[#f3f6f3]"}`}
         >
           <span className="text-[27px] leading-none">{categoryEmoji(category)}</span>
-          {category.name && <span className="mt-1 max-w-full truncate text-[10px] font-semibold text-[#53655c]">{category.name}</span>}
+          <span className="mt-1 max-w-full truncate text-[10px] font-semibold text-[#53655c]">{categoryName(category, t)}</span>
           {value === category.id && <span style={{ backgroundColor: getCategoryColor(category) }} className="absolute right-1 top-1 grid h-4 w-4 place-items-center rounded-full text-[10px] text-white">✓</span>}
         </button>
       ))}
@@ -80,6 +88,7 @@ export function QuickExpenseForm({
   onScanReceipt?: () => void;
   onManageCategories?: () => void;
 }) {
+  const { t } = useI18n();
   const amountInput = useRef<HTMLInputElement>(null);
   const [amount, setAmount] = useState(expense ? String(expense.amount) : "");
   const [description, setDescription] = useState(expense?.description || "");
@@ -127,14 +136,14 @@ export function QuickExpenseForm({
       >
         {!embedded && <div className="flex items-center gap-2">
           <h2 className="flex-1 text-xl font-bold">
-            {expense ? "Gasto" : "Registrar gasto"}
+            {expense ? t("expense.editTitle") : t("expense.title")}
           </h2>
           {remove && (
             <button
               type="button"
               onClick={remove}
-              aria-label="Eliminar gasto"
-              title="Eliminar gasto"
+              aria-label={t("expense.delete")}
+              title={t("expense.delete")}
               className="grid h-10 w-10 place-items-center rounded-full bg-red-50 text-red-600"
             >
               <Trash2 size={18} />
@@ -143,14 +152,14 @@ export function QuickExpenseForm({
           <button
             type="button"
             onClick={close}
-            aria-label="Cerrar"
+            aria-label={t("common.close")}
             className="rounded-full bg-[#f1f4f2] p-2"
           >
             <X size={19} />
           </button>
         </div>}
         <label className="block">
-          <b className="mb-2 block text-sm">Monto</b>
+          <b className="mb-2 block text-sm">{t("expense.amount")}</b>
           <input
             ref={amountInput}
             autoFocus
@@ -163,18 +172,18 @@ export function QuickExpenseForm({
           />
         </label>
         <label className="block">
-          <b className="mb-2 block text-sm">Descripción</b>
+          <b className="mb-2 block text-sm">{t("expense.description")}</b>
           <input
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="Ej. Uber al centro"
+            placeholder={t("expense.descriptionPlaceholder")}
             className="min-h-14 w-full rounded-2xl bg-[#f3f6f3] p-4 outline-none focus:ring-2 focus:ring-[#176b46]"
           />
         </label>
         <div>
           <div className="mb-2 flex items-center">
-            <b className="flex-1 text-sm">Categoría</b>
-            {onManageCategories && <button type="button" onClick={onManageCategories} className="min-h-9 rounded-xl px-2 text-xs font-semibold text-[#176b46]">+ Administrar</button>}
+            <b className="flex-1 text-sm">{t("expense.category")}</b>
+            {onManageCategories && <button type="button" onClick={onManageCategories} className="min-h-9 rounded-xl px-2 text-xs font-semibold text-[#176b46]">+ {t("expense.manage")}</button>}
           </div>
           <CategoryPicker
             categories={categories}
@@ -185,15 +194,15 @@ export function QuickExpenseForm({
         </div>
         {onScanReceipt && categoryId === "supermarket" && !expense && (
           <div className="sheet rounded-2xl border border-[#176b46]/20 bg-[#e5f3ea] p-3">
-            <p className="mb-2 text-sm font-semibold text-[#176b46]">¿Cómo quieres registrarlo?</p>
+            <p className="mb-2 text-sm font-semibold text-[#176b46]">{t("expense.registerHow")}</p>
             <button type="button" onClick={onScanReceipt} className="flex min-h-14 w-full items-center gap-3 rounded-2xl bg-white px-4 text-left text-[#176b46] shadow-sm">
-              <Camera size={22} /><span><b className="block">Escanear ticket</b><small className="text-[#718078]">Detecta productos y total</small></span>
+              <Camera size={22} /><span><b className="block">{t("expense.scanTicket")}</b><small className="text-[#718078]">{t("expense.scanHint")}</small></span>
             </button>
-            <p className="mt-2 text-xs text-[#718078]">También puedes completar el formulario manualmente.</p>
+            <p className="mt-2 text-xs text-[#718078]">{t("expense.manualHint")}</p>
           </div>
         )}
         <label className="block">
-          <b className="mb-2 block text-sm">Fecha</b>
+          <b className="mb-2 block text-sm">{t("expense.date")}</b>
           <input
             type="date"
             value={date}
@@ -202,7 +211,7 @@ export function QuickExpenseForm({
           />
         </label>
         <button className="min-h-14 w-full rounded-2xl bg-[#176b46] px-5 font-bold text-white">
-          Guardar gasto
+          {t("expense.save")}
         </button>
       </form>
   );

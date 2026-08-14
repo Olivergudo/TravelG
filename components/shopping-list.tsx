@@ -3,11 +3,13 @@
 import { Check, ChevronLeft, Circle, ListChecks, LoaderCircle, Pencil, Plus, Trash2, X } from "lucide-react";
 import { useRef, useState } from "react";
 import type { AppData, ShoppingListItem } from "@/lib/types";
+import { useI18n } from "@/lib/i18n";
 
 type Update = (fn: (data: AppData) => AppData) => void;
 const uid = () => globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
 export function ShoppingList({ data, update, showFridge }: { data: AppData; update: Update; showFridge: () => void }) {
+  const { t, count } = useI18n();
   const [name, setName] = useState("");
   const [editingItem, setEditingItem] = useState<ShoppingListItem>();
   const input = useRef<HTMLInputElement>(null);
@@ -47,31 +49,31 @@ export function ShoppingList({ data, update, showFridge }: { data: AppData; upda
 
   return <>
     <header className="flex items-start gap-3 px-5 pb-5 pt-[max(2rem,env(safe-area-inset-top))]">
-      <button type="button" onClick={showFridge} aria-label="Volver al Refrigerador" className="theme-card mt-0.5 grid h-11 w-11 shrink-0 place-items-center rounded-full border border-black/[.06] bg-white"><ChevronLeft size={21}/></button>
-      <div><p className="text-[13px] font-bold uppercase tracking-[.18em] text-[#6f8278]">Checklist</p>
-      <h1 className="mt-1 text-[30px] font-bold leading-tight">Lista</h1>
-      <p className="mt-1 text-sm text-[#718078]">{pending.length} {pending.length === 1 ? "pendiente" : "pendientes"}</p></div>
+      <button type="button" onClick={showFridge} aria-label={t("common.back")} className="theme-card mt-0.5 grid h-11 w-11 shrink-0 place-items-center rounded-full border border-black/[.06] bg-white"><ChevronLeft size={21}/></button>
+      <div><p className="text-[13px] font-bold uppercase tracking-[.18em] text-[#6f8278]">{t("list.eyebrow")}</p>
+      <h1 className="mt-1 text-[30px] font-bold leading-tight">{t("list.title")}</h1>
+      <p className="mt-1 text-sm text-[#718078]">{count("fridge.pending", pending.length)}</p></div>
     </header>
     <div className="space-y-7 px-4">
       <form onSubmit={add} className="theme-card flex min-w-0 gap-2 rounded-2xl border border-black/[.04] bg-white p-2 shadow-sm">
-        <input ref={input} value={name} onChange={(event) => setName(event.target.value)} enterKeyHint="done" placeholder="Agregar producto…" aria-label="Nombre del producto" className="min-h-12 min-w-0 flex-1 bg-transparent px-3 outline-none" />
+        <input ref={input} value={name} onChange={(event) => setName(event.target.value)} enterKeyHint="done" placeholder={t("list.addPlaceholder")} aria-label={t("list.addPlaceholder")} className="min-h-12 min-w-0 flex-1 bg-transparent px-3 outline-none" />
         <button type="submit" aria-label="Agregar producto" className="tap grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-[#176b46] text-white"><Plus size={23}/></button>
       </form>
       {!data.shoppingListItems.length && (
         <section className="theme-card rounded-[28px] border border-black/[.04] bg-white px-6 py-10 text-center">
           <ListChecks className="mx-auto text-[#91a098]" size={38}/>
-          <h2 className="mt-4 text-xl font-bold">Tu lista está vacía</h2>
+          <h2 className="mt-4 text-xl font-bold">{t("list.empty")}</h2>
           <p className="mt-2 text-sm text-[#718078]">
-            Agrega productos para recordar lo que necesitas comprar.
+            {t("list.emptyHint")}
           </p>
         </section>
       )}
-      {pending.length > 0 && <ItemGroup title="Pendientes">{pending.map((item) => <SwipeItem key={item.id} item={item} toggle={() => toggle(item.id)} edit={() => setEditingItem(item)} remove={() => remove(item.id)}/>)}</ItemGroup>}
+      {pending.length > 0 && <ItemGroup title={t("list.pending")}>{pending.map((item) => <SwipeItem key={item.id} item={item} toggle={() => toggle(item.id)} edit={() => setEditingItem(item)} remove={() => remove(item.id)}/>)}</ItemGroup>}
       {completed.length > 0 && <section>
-        <div className="mb-2 flex min-h-9 items-center px-1"><h2 className="flex-1 text-xs font-bold uppercase tracking-[.14em] text-[#718078]">Completados</h2><button onClick={clearCompleted} className="min-h-9 px-2 text-xs font-semibold text-[#176b46]">Limpiar completados</button></div>
+        <div className="mb-2 flex min-h-9 items-center px-1"><h2 className="flex-1 text-xs font-bold uppercase tracking-[.14em] text-[#718078]">{t("list.completed")}</h2><button onClick={clearCompleted} className="min-h-9 px-2 text-xs font-semibold text-[#176b46]">{t("list.clear")}</button></div>
         <div className="space-y-3">{completed.map((item) => <SwipeItem key={item.id} item={item} toggle={() => toggle(item.id)} edit={() => setEditingItem(item)} remove={() => remove(item.id)}/>)}</div>
       </section>}
-      {data.shoppingListItems.length > 0 && <p className="text-center text-xs text-[#718078]">Toca para marcar · Desliza para eliminar</p>}
+      {data.shoppingListItems.length > 0 && <p className="text-center text-xs text-[#718078]">{t("list.hint")}</p>}
     </div>
     {editingItem && <EditListItem item={editingItem} close={() => setEditingItem(undefined)} save={(nextName) => { rename(editingItem.id, nextName); setEditingItem(undefined); }} />}
   </>;
@@ -125,13 +127,14 @@ function SwipeItem({ item, toggle, edit, remove }: { item: ShoppingListItem; tog
 }
 
 function EditListItem({ item, close, save }: { item: ShoppingListItem; close: () => void; save: (name: string) => void }) {
+  const { t } = useI18n();
   const [name, setName] = useState(item.name);
   const [saving, setSaving] = useState(false);
   return <div className="fixed inset-0 z-[80] flex items-end justify-center bg-black/50 sm:items-center">
     <form onSubmit={(event) => { event.preventDefault(); if (!name.trim() || saving) return; setSaving(true); save(name); }} className="theme-card w-full max-w-lg rounded-t-[30px] bg-white p-5 safe-bottom sm:rounded-[30px]">
-      <div className="flex items-center gap-3"><h2 className="flex-1 text-xl font-bold">Editar producto</h2><button type="button" onClick={close} aria-label="Cerrar" className="grid h-11 w-11 place-items-center rounded-full bg-[#edf2ee]"><X /></button></div>
-      <label className="mt-4 block text-sm font-semibold">Nombre<input autoFocus required value={name} onChange={(event) => setName(event.target.value)} className="mt-1 min-h-12 w-full rounded-xl border border-black/10 bg-transparent px-3 text-base outline-none focus:border-[#176b46]" /></label>
-      <div className="mt-5 grid grid-cols-2 gap-3"><button type="button" onClick={close} className="min-h-12 rounded-2xl border border-black/10 font-semibold">Cancelar</button><button disabled={saving} className="flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-[#176b46] font-semibold text-white disabled:opacity-50">{saving && <LoaderCircle className="animate-spin" size={18}/>}Guardar</button></div>
+      <div className="flex items-center gap-3"><h2 className="flex-1 text-xl font-bold">{t("list.editProduct")}</h2><button type="button" onClick={close} aria-label={t("common.close")} className="grid h-11 w-11 place-items-center rounded-full bg-[#edf2ee]"><X /></button></div>
+      <label className="mt-4 block text-sm font-semibold">{t("list.name")}<input autoFocus required value={name} onChange={(event) => setName(event.target.value)} className="mt-1 min-h-12 w-full rounded-xl border border-black/10 bg-transparent px-3 text-base outline-none focus:border-[#176b46]" /></label>
+      <div className="mt-5 grid grid-cols-2 gap-3"><button type="button" onClick={close} className="min-h-12 rounded-2xl border border-black/10 font-semibold">{t("common.cancel")}</button><button disabled={saving} className="flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-[#176b46] font-semibold text-white disabled:opacity-50">{saving && <LoaderCircle className="animate-spin" size={18}/>} {t("common.save")}</button></div>
     </form>
   </div>;
 }

@@ -2,10 +2,11 @@
 
 import { useMemo, useState } from "react";
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
-import { categoryEmoji } from "./expense-ui";
+import { categoryEmoji, categoryName } from "./expense-ui";
 import type { Category, Expense } from "@/lib/types";
 import { getCategoryColor } from "@/lib/category-colors";
 import { formatCurrency, type Currency } from "@/lib/currency";
+import { useI18n } from "@/lib/i18n";
 
 export function buildCategoryDistribution(expenses: Expense[], categories: Category[], total: number) {
   return categories.map((category) => {
@@ -23,6 +24,7 @@ export function buildCategoryDistribution(expenses: Expense[], categories: Categ
 }
 
 export function FinanceCharts({ expenses, categories, total, currency }: { expenses: Expense[]; categories: Category[]; total: number; currency: Currency }) {
+  const { t } = useI18n();
   const [active, setActive] = useState<number | null>(null);
   const distribution = useMemo(
     () => buildCategoryDistribution(expenses, categories, total),
@@ -31,16 +33,16 @@ export function FinanceCharts({ expenses, categories, total, currency }: { expen
 
   if (!distribution.length) return (
     <section className="theme-card rounded-[28px] border border-black/[.04] bg-white p-8 text-center">
-      <h2 className="font-bold">Aún no hay gastos para mostrar</h2>
-      <p className="mt-1 text-sm text-[#718078]">Agrega tu primer gasto para ver la distribución.</p>
+      <h2 className="font-bold">{t("finance.noExpenses")}</h2>
+      <p className="mt-1 text-sm text-[#718078]">{t("finance.noExpensesHint")}</p>
     </section>
   );
 
   return (
     <section className="theme-card min-w-0 max-w-full overflow-hidden rounded-[28px] border border-black/[.04] bg-white p-5">
-      <div><p className="text-sm font-semibold text-[#718078]">Distribución</p><h2 className="text-xl font-bold">Por categoría</h2></div>
+      <div><p className="text-sm font-semibold text-[#718078]">{t("finance.distribution")}</p><h2 className="text-xl font-bold">{t("finance.byCategory")}</h2></div>
       <div className="grid min-w-0 grid-cols-1 items-center gap-5 pt-3 sm:grid-cols-[210px_minmax(0,1fr)]">
-        <div className="finance-donut-enter relative mx-auto aspect-square w-[min(56vw,210px)] max-w-full" aria-label="Distribución de gastos por categoría">
+        <div className="finance-donut-enter relative mx-auto aspect-square w-[min(56vw,210px)] max-w-full" aria-label={t("finance.byCategory")}>
           <ResponsiveContainer width="100%" height="100%" minWidth={0}>
             <PieChart>
               <Pie data={distribution} dataKey="amount" innerRadius="62%" outerRadius="87%" paddingAngle={2} stroke="none" isAnimationActive={false} onMouseEnter={(_, index) => setActive(index)} onMouseLeave={() => setActive(null)} onClick={(_, index) => setActive(index)}>
@@ -50,7 +52,7 @@ export function FinanceCharts({ expenses, categories, total, currency }: { expen
             </PieChart>
           </ResponsiveContainer>
           <div className="pointer-events-none absolute inset-0 grid place-content-center text-center">
-            <small className="text-[9px] font-bold uppercase tracking-[.14em] text-[#718078]">Total</small>
+            <small className="text-[9px] font-bold uppercase tracking-[.14em] text-[#718078]">{t("finance.total")}</small>
             <b className="mt-1 text-sm sm:text-base">{formatCurrency(total, currency)}</b>
           </div>
         </div>
@@ -59,7 +61,7 @@ export function FinanceCharts({ expenses, categories, total, currency }: { expen
             <button key={item.id} type="button" onClick={() => setActive(index)} onMouseEnter={() => setActive(index)} onMouseLeave={() => setActive(null)} className="flex min-h-[58px] w-full min-w-0 items-center gap-2 py-2 text-left">
               <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: item.color }} />
               <span className="shrink-0 text-xl">{item.emoji}</span>
-              <b className="min-w-0 flex-1 truncate text-sm">{item.category.name || "Categoría"}</b>
+              <b className="min-w-0 flex-1 truncate text-sm">{categoryName(item.category, t)}</b>
               <span className="shrink-0 text-right"><b className="block whitespace-nowrap text-sm">{formatCurrency(item.amount, currency)}</b><small className="text-[#718078]">{item.percentage}%</small></span>
             </button>
           ))}

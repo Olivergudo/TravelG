@@ -7,6 +7,7 @@ import {
   Coins,
   LoaderCircle,
   LogIn,
+  Languages,
   Mail,
   Moon,
   ShieldCheck,
@@ -19,6 +20,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { isCurrency, type Currency } from "@/lib/currency";
+import { languageOptions, useI18n, type AppLanguage } from "@/lib/i18n";
 
 export function AccountAccess({
   onAccountChanged,
@@ -26,6 +28,7 @@ export function AccountAccess({
   displayName,
   currency,
   theme,
+  language,
   onPreferencesChanged,
 }: {
   onAccountChanged: () => void;
@@ -33,6 +36,7 @@ export function AccountAccess({
   displayName: string;
   currency: Currency;
   theme: "light" | "dark";
+  language: AppLanguage;
   onPreferencesChanged: (user: User) => void;
 }) {
   const router = useRouter();
@@ -43,7 +47,8 @@ export function AccountAccess({
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState("");
-  const [preference, setPreference] = useState<"name" | "currency" | "theme">();
+  const [preference, setPreference] = useState<"name" | "language" | "currency" | "theme">();
+  const { t } = useI18n();
   const modalOpen = open || Boolean(preference);
 
   useEffect(() => {
@@ -141,7 +146,7 @@ export function AccountAccess({
     <>
       <button
         onClick={() => setOpen(true)}
-        aria-label="Cuenta y sincronización"
+        aria-label={t("profile.account")}
         className="theme-card grid h-12 w-12 place-items-center rounded-2xl bg-white text-[#176b46] shadow-sm"
       >
         {isAnonymous ? <ShieldCheck size={21} /> : <UserRound size={21} />}
@@ -157,15 +162,15 @@ export function AccountAccess({
             <div className="mb-5 flex items-center justify-between">
               <div>
                 <p className="text-xs font-bold uppercase tracking-[.14em] text-[#718078]">
-                  Tu cuenta
+                  {t("profile.account")}
                 </p>
                 <h2 className="mt-1 text-2xl font-bold">
-                  Perfil y preferencias
+                  {t("profile.title")}
                 </h2>
               </div>
               <button
                 onClick={() => setOpen(false)}
-                aria-label="Cerrar"
+                aria-label={t("common.close")}
                 className="grid h-11 w-11 place-items-center rounded-full bg-[#f1f4f2]"
               >
                 <X size={20} />
@@ -176,25 +181,26 @@ export function AccountAccess({
               <div>
                 <div className="rounded-2xl bg-[#e5f3ea] p-4">
                   <div className="flex items-center gap-2 font-bold text-[#176b46]">
-                    <CheckCircle2 size={20} /> Cuenta protegida
+                    <CheckCircle2 size={20} /> {t("profile.protected")}
                   </div>
                   <p className="mt-2 break-all text-sm">{user?.email}</p>
                 </div>
-                <p className="mb-2 mt-5 px-1 text-xs font-bold uppercase tracking-[.14em] text-[#718078]">Preferencias</p>
+                <p className="mb-2 mt-5 px-1 text-xs font-bold uppercase tracking-[.14em] text-[#718078]">{t("profile.preferences")}</p>
                 <div className="overflow-hidden rounded-2xl border border-black/[.06]">
-                  <PreferenceRow icon={<UserRound size={19}/>} label="Nombre" value={displayName || "Usuario"} action={() => setPreference("name")}/>
-                  <PreferenceRow icon={<Coins size={19}/>} label="Moneda principal" value={currency} action={() => setPreference("currency")}/>
-                  <PreferenceRow icon={theme === "dark" ? <Moon size={19}/> : <Sun size={19}/>} label="Apariencia" value={theme === "dark" ? "Oscuro" : "Claro"} action={() => setPreference("theme")}/>
+                  <PreferenceRow icon={<UserRound size={19}/>} label={t("profile.name")} value={displayName || "Usuario"} action={() => setPreference("name")}/>
+                  <PreferenceRow icon={<Languages size={19}/>} label={t("profile.language")} value={languageOptions.find(([code]) => code === language)?.[2]} action={() => setPreference("language")}/>
+                  <PreferenceRow icon={<Coins size={19}/>} label={t("profile.currency")} value={currency} action={() => setPreference("currency")}/>
+                  <PreferenceRow icon={theme === "dark" ? <Moon size={19}/> : <Sun size={19}/>} label={t("profile.appearance")} value={theme === "dark" ? t("profile.dark") : t("profile.light")} action={() => setPreference("theme")}/>
                 </div>
                 {admin && (
-                  <><p className="mb-2 mt-5 px-1 text-xs font-bold uppercase tracking-[.14em] text-[#718078]">Administración</p><div className="overflow-hidden rounded-2xl border border-black/[.06]"><PreferenceRow icon={<UserCog size={19}/>} label="Administración" action={() => router.push("/admin")}/></div></>
+                  <><p className="mb-2 mt-5 px-1 text-xs font-bold uppercase tracking-[.14em] text-[#718078]">{t("profile.admin")}</p><div className="overflow-hidden rounded-2xl border border-black/[.06]"><PreferenceRow icon={<UserCog size={19}/>} label={t("profile.admin")} action={() => router.push("/admin")}/></div></>
                 )}
-                <p className="mb-2 mt-5 px-1 text-xs font-bold uppercase tracking-[.14em] text-[#718078]">Sesión</p>
+                <p className="mb-2 mt-5 px-1 text-xs font-bold uppercase tracking-[.14em] text-[#718078]">{t("profile.session")}</p>
                 <button
                   onClick={signOut}
                   className="min-h-12 w-full rounded-2xl border border-black/10 font-semibold text-[#718078]"
                 >
-                  Cerrar sesión
+                  {t("profile.signOut")}
                 </button>
               </div>
             ) : (
@@ -286,11 +292,20 @@ export function AccountAccess({
           </section>
         </div>
       )}
-      {preference === "name" && <NameEditor current={displayName} close={() => setPreference(undefined)} save={async (name) => { await updatePreference({ full_name: name, name }); setPreference(undefined); }}/>}
+      {preference === "name" && (
+        <NameEditor current={displayName} close={() => setPreference(undefined)} save={async (name) => { await updatePreference({ full_name: name, name }); setPreference(undefined); }}/>
+      )}
+      {preference === "language" && <LanguagePicker current={language} close={() => setPreference(undefined)} select={async (next) => { await updatePreference({ language: next }); localStorage.setItem("gasto-listo-language-last", next); setPreference(undefined); }}/>}
       {preference === "currency" && <CurrencyPicker current={currency} close={() => setPreference(undefined)} select={async (next) => { if (!isCurrency(next)) return; await updatePreference({ currency: next }); setPreference(undefined); }}/>}
       {preference === "theme" && <ThemePicker current={theme} close={() => setPreference(undefined)} select={async (next) => { await updatePreference({ theme: next }); setPreference(undefined); }}/>}
     </>
   );
+}
+
+function LanguagePicker({ current, close, select }: { current: AppLanguage; close: () => void; select: (language: AppLanguage) => Promise<void> }) {
+  const { t } = useI18n();
+  const [saving, setSaving] = useState<AppLanguage>();
+  return <PreferenceSheet title={t("profile.languageTitle")} close={close}><div className="mt-5 overflow-hidden rounded-2xl border border-black/[.06]">{languageOptions.map(([code, flag, label]) => <button key={code} disabled={Boolean(saving)} onClick={async () => { setSaving(code); try { await select(code); } catch { setSaving(undefined); } }} className="flex min-h-16 w-full items-center gap-3 border-b border-black/[.06] px-4 text-left last:border-0"><span className="text-2xl">{flag}</span><b className="flex-1">{label}</b>{saving === code ? <LoaderCircle className="animate-spin" size={18}/> : current === code ? <CheckCircle2 className="text-[#176b46]" size={20}/> : null}</button>)}</div></PreferenceSheet>;
 }
 
 function PreferenceRow({ icon, label, value, action }: { icon: React.ReactNode; label: string; value?: string; action: () => void }) {
@@ -298,21 +313,25 @@ function PreferenceRow({ icon, label, value, action }: { icon: React.ReactNode; 
 }
 
 function PreferenceSheet({ title, close, children }: { title: string; close: () => void; children: React.ReactNode }) {
-  return <div className="fixed inset-0 z-[100] flex items-end justify-center overscroll-none bg-black/55 sm:items-center" onMouseDown={(event) => event.target === event.currentTarget && close()}><section className="theme-card max-h-[92dvh] w-full max-w-md overscroll-contain overflow-y-auto rounded-t-[30px] bg-white p-5 safe-bottom sm:rounded-[30px]"><div className="flex items-center"><h2 className="flex-1 text-xl font-bold">{title}</h2><button onClick={close} aria-label="Cerrar" className="grid h-11 w-11 place-items-center rounded-full bg-[#f1f4f2]"><X size={20}/></button></div>{children}</section></div>;
+  const { t } = useI18n();
+  return <div className="fixed inset-0 z-[100] flex items-end justify-center overscroll-none bg-black/55 sm:items-center" onMouseDown={(event) => event.target === event.currentTarget && close()}><section className="theme-card max-h-[92dvh] w-full max-w-md overscroll-contain overflow-y-auto rounded-t-[30px] bg-white p-5 safe-bottom sm:rounded-[30px]"><div className="flex items-center"><h2 className="flex-1 text-xl font-bold">{title}</h2><button onClick={close} aria-label={t("common.close")} className="grid h-11 w-11 place-items-center rounded-full bg-[#f1f4f2]"><X size={20}/></button></div>{children}</section></div>;
 }
 
 function NameEditor({ current, close, save }: { current: string; close: () => void; save: (name: string) => Promise<void> }) {
+  const { t } = useI18n();
   const [name, setName] = useState(current); const [saving, setSaving] = useState(false); const [error, setError] = useState("");
-  return <PreferenceSheet title="Editar nombre" close={close}><form onSubmit={async (event) => { event.preventDefault(); const clean = name.trim().replace(/\s+/g, " "); if (!clean || saving) return; setSaving(true); setError(""); try { await save(clean); } catch { setError("No pudimos guardar tu nombre."); setSaving(false); } }} className="mt-5"><label htmlFor="profile-name" className="text-sm font-bold">Nombre</label><input id="profile-name" autoFocus required maxLength={50} autoComplete="name" value={name} onChange={(event) => setName(event.target.value)} className="mt-2 min-h-14 w-full rounded-2xl border border-black/10 bg-transparent px-4 text-base outline-none focus:border-[#176b46]"/>{error && <p className="mt-3 text-sm text-red-700">{error}</p>}<div className="mt-5 grid grid-cols-2 gap-2"><button type="button" onClick={close} className="min-h-12 rounded-2xl border border-black/10 font-semibold">Cancelar</button><button disabled={!name.trim() || saving} className="flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-[#176b46] font-semibold text-white disabled:opacity-50">{saving && <LoaderCircle className="animate-spin" size={18}/>} Guardar</button></div></form></PreferenceSheet>;
+  return <PreferenceSheet title={t("profile.editName")} close={close}><form onSubmit={async (event) => { event.preventDefault(); const clean = name.trim().replace(/\s+/g, " "); if (!clean || saving) return; setSaving(true); setError(""); try { await save(clean); } catch { setError("No pudimos guardar tu nombre."); setSaving(false); } }} className="mt-5"><label htmlFor="profile-name" className="text-sm font-bold">{t("profile.name")}</label><input id="profile-name" autoFocus required maxLength={50} autoComplete="name" value={name} onChange={(event) => setName(event.target.value)} className="mt-2 min-h-14 w-full rounded-2xl border border-black/10 bg-transparent px-4 text-base outline-none focus:border-[#176b46]"/>{error && <p className="mt-3 text-sm text-red-700">{error}</p>}<div className="mt-5 grid grid-cols-2 gap-2"><button type="button" onClick={close} className="min-h-12 rounded-2xl border border-black/10 font-semibold">{t("common.cancel")}</button><button disabled={!name.trim() || saving} className="flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-[#176b46] font-semibold text-white disabled:opacity-50">{saving && <LoaderCircle className="animate-spin" size={18}/>} {t("common.save")}</button></div></form></PreferenceSheet>;
 }
 
 const currencyOptions: Array<[Currency, string, string]> = [["CLP", "🇨🇱", "Peso chileno"], ["MXN", "🇲🇽", "Peso mexicano"], ["USD", "🇺🇸", "Dólar estadounidense"], ["EUR", "🇪🇺", "Euro"]];
 function CurrencyPicker({ current, close, select }: { current: Currency; close: () => void; select: (currency: Currency) => Promise<void> }) {
+  const { t } = useI18n();
   const [saving, setSaving] = useState<Currency>();
-  return <PreferenceSheet title="Moneda principal" close={close}><div className="mt-5 overflow-hidden rounded-2xl border border-black/[.06]">{currencyOptions.map(([code, flag, name]) => <button key={code} disabled={Boolean(saving)} onClick={async () => { setSaving(code); try { await select(code); } catch { setSaving(undefined); } }} className="flex min-h-16 w-full items-center gap-3 border-b border-black/[.06] px-4 text-left last:border-0"><span className="text-2xl">{flag}</span><span className="min-w-0 flex-1"><b>{code}</b><small className="ml-2 text-[#718078]">— {name}</small></span>{saving === code ? <LoaderCircle className="animate-spin" size={18}/> : current === code ? <CheckCircle2 className="text-[#176b46]" size={20}/> : null}</button>)}</div><p className="mt-4 text-xs text-[#718078]">Cambiar la moneda modifica el formato, no convierte tus importes anteriores.</p></PreferenceSheet>;
+  return <PreferenceSheet title={t("profile.currency")} close={close}><div className="mt-5 overflow-hidden rounded-2xl border border-black/[.06]">{currencyOptions.map(([code, flag]) => <button key={code} disabled={Boolean(saving)} onClick={async () => { setSaving(code); try { await select(code); } catch { setSaving(undefined); } }} className="flex min-h-16 w-full items-center gap-3 border-b border-black/[.06] px-4 text-left last:border-0"><span className="text-2xl">{flag}</span><span className="min-w-0 flex-1"><b>{code}</b><small className="ml-2 text-[#718078]">— {t(`currency.${code}` as "currency.CLP")}</small></span>{saving === code ? <LoaderCircle className="animate-spin" size={18}/> : current === code ? <CheckCircle2 className="text-[#176b46]" size={20}/> : null}</button>)}</div></PreferenceSheet>;
 }
 function ThemePicker({ current, close, select }: { current: "light" | "dark"; close: () => void; select: (theme: "light" | "dark") => Promise<void> }) {
+  const { t } = useI18n();
   const [saving, setSaving] = useState<string>();
-  const options = [["dark", "Oscuro", <Moon key="dark" size={20}/>], ["light", "Claro", <Sun key="light" size={20}/>]] as const;
-  return <PreferenceSheet title="Apariencia" close={close}><div className="mt-5 overflow-hidden rounded-2xl border border-black/[.06]">{options.map(([value, label, icon]) => <button key={value} disabled={Boolean(saving)} onClick={async () => { setSaving(value); try { await select(value); } catch { setSaving(undefined); } }} className="flex min-h-16 w-full items-center gap-3 border-b border-black/[.06] px-4 text-left last:border-0"><span className="text-[#176b46]">{icon}</span><b className="flex-1">{label}</b>{saving === value ? <LoaderCircle className="animate-spin" size={18}/> : current === value ? <CheckCircle2 className="text-[#176b46]" size={20}/> : null}</button>)}</div></PreferenceSheet>;
+  const options = [["dark", t("profile.dark"), <Moon key="dark" size={20}/>], ["light", t("profile.light"), <Sun key="light" size={20}/>]] as const;
+  return <PreferenceSheet title={t("profile.appearance")} close={close}><div className="mt-5 overflow-hidden rounded-2xl border border-black/[.06]">{options.map(([value, label, icon]) => <button key={value} disabled={Boolean(saving)} onClick={async () => { setSaving(value); try { await select(value); } catch { setSaving(undefined); } }} className="flex min-h-16 w-full items-center gap-3 border-b border-black/[.06] px-4 text-left last:border-0"><span className="text-[#176b46]">{icon}</span><b className="flex-1">{label}</b>{saving === value ? <LoaderCircle className="animate-spin" size={18}/> : current === value ? <CheckCircle2 className="text-[#176b46]" size={20}/> : null}</button>)}</div></PreferenceSheet>;
 }

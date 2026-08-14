@@ -37,6 +37,7 @@ import { canUseFeature } from "@/lib/features/plans";
 import { formatCurrency, isCurrency, type Currency } from "@/lib/currency";
 import { requiredPreferences } from "@/lib/user-preferences";
 import { RoomiesScreen } from "./roomies-screen";
+import { I18nProvider, isAppLanguage, translate, useI18n, type AppLanguage } from "@/lib/i18n";
 
 type MainTab = "finances" | "list" | "fridge" | "roomies" | "shopping";
 
@@ -51,6 +52,13 @@ export function AppShell() {
     return requested === "roomies" ? "roomies" : requested === "purchases" ? "shopping" : requested === "list" ? "list" : "finances";
   });
   const [roomiesAttention, setRoomiesAttention] = useState(0);
+  const [language, setLanguage] = useState<AppLanguage>(() => {
+    if (typeof window === "undefined") return "es";
+    const cached = localStorage.getItem("gasto-listo-language-last");
+    if (isAppLanguage(cached)) return cached;
+    const browser = navigator.language.slice(0, 2);
+    return isAppLanguage(browser) ? browser : "es";
+  });
   const [theme, setTheme] = useState<"light" | "dark">("dark");
   const [currency, setCurrency] = useState<Currency>("CLP");
   const [addingExpense, setAddingExpense] = useState(false);
@@ -98,6 +106,7 @@ export function AppShell() {
   const required = requiredPreferences(authUser?.user_metadata);
   const displayName = required.displayName;
   const configuredCurrency = required.currency;
+  const needsLanguage = Boolean(authUser && !authUser.is_anonymous && required.needsLanguage);
   const needsName = Boolean(authUser && !authUser.is_anonymous && required.needsName);
   const needsCurrency = Boolean(authUser && !authUser.is_anonymous && required.needsCurrency);
   useEffect(() => {
@@ -130,11 +139,13 @@ export function AppShell() {
       ? metadata.theme
       : storedTheme === "light" || storedTheme === "dark" ? storedTheme : "dark";
     const nextCurrency = isCurrency(metadata?.currency) ? metadata.currency : "CLP";
+    const nextLanguage = isAppLanguage(metadata?.language) ? metadata.language : language;
     queueMicrotask(() => {
       setTheme(nextTheme);
       setCurrency(nextCurrency);
+      setLanguage(nextLanguage);
     });
-  }, [authUser]);
+  }, [authUser, language]);
   useEffect(() => {
     const restoreFromUrl = () => {
       const requested = new URLSearchParams(window.location.search).get("tab");
@@ -146,6 +157,10 @@ export function AppShell() {
   useEffect(() => {
     document.documentElement.dataset.appTheme = theme;
   }, [theme]);
+  useEffect(() => {
+    document.documentElement.lang = language;
+    localStorage.setItem("gasto-listo-language-last", language);
+  }, [language]);
   useEffect(() => {
     if (!supabase || !authUser) return;
     let active = true;
@@ -169,17 +184,20 @@ export function AppShell() {
   }, [authUser]);
   if (!authReady || (authUser && (!ready || !planReady)))
     return (
+      <I18nProvider language={language}>
       <main className="grid min-h-screen place-items-center text-[#708078]">
-        Cargando…
+        {translate(language, "common.loading")}
       </main>
+      </I18nProvider>
     );
-  if (isSupabaseConfigured && !authUser) return <EmailAccessScreen />;
+  if (isSupabaseConfigured && !authUser) return <I18nProvider language={language}><EmailAccessScreen /></I18nProvider>;
   if (recoveringPassword)
     return (
-      <UpdatePasswordScreen completed={() => setRecoveringPassword(false)} />
+      <I18nProvider language={language}><UpdatePasswordScreen completed={() => setRecoveringPassword(false)} /></I18nProvider>
     );
-  if (authUser?.is_anonymous) return <AnonymousLinkScreen />;
+  if (authUser?.is_anonymous) return <I18nProvider language={language}><AnonymousLinkScreen /></I18nProvider>;
   return (
+    <I18nProvider language={language}>
     <main
       data-theme={theme}
       className="theme-root mx-auto min-h-dvh w-full min-w-0 max-w-2xl bg-[#f3f6f3] safe-bottom sm:shadow-[0_0_40px_rgba(23,61,45,.08)]"
@@ -230,21 +248,21 @@ export function AppShell() {
           active={tab === "finances" || tab === "shopping"}
           click={() => selectTab("finances")}
           icon={<BadgeDollarSign />}
-          label="Finanzas"
+          label={translate(language, "nav.finances")}
         />
         {hasFridge && (
           <Nav
             active={tab === "fridge" || tab === "list"}
             click={() => selectTab("fridge")}
             icon={<Refrigerator />}
-            label="Refrigerador"
+            label={translate(language, "nav.fridge")}
           />
         )}
         <Nav
           active={tab === "roomies"}
           click={() => selectTab("roomies")}
           icon={<House />}
-          label="Roomies"
+          label={translate(language, "nav.roomies")}
           badge={roomiesAttention}
         />
         {showGlobalExpenseButton && (
@@ -310,11 +328,16 @@ export function AppShell() {
           Gasto guardado
         </div>
       )}
-      {(needsName || needsCurrency) && authUser && (
+      {(needsLanguage || needsName || needsCurrency) && authUser && (
         <PreferencesOnboarding
           email={authUser.email || ""}
           displayName={displayName}
           currency={configuredCurrency}
+          language={required.language}
+          needsLanguage={needsLanguage}
+          needsName={needsName}
+          needsCurrency={needsCurrency}
+          languageChanged={setLanguage}
           saved={(user) => {
             setAuthUser(user);
             if (isCurrency(user.user_metadata.currency)) setCurrency(user.user_metadata.currency);
@@ -322,28 +345,32 @@ export function AppShell() {
         />
       )}
     </main>
+    </I18nProvider>
   );
 }
 
-function PreferencesOnboarding({ email, displayName, currency, saved }: { email: string; displayName: string; currency?: Currency; saved: (user: User) => void }) {
-  const needsName = !displayName;
-  const needsCurrency = !currency;
-  const [step, setStep] = useState<"name" | "currency">(needsName ? "name" : "currency");
+function PreferencesOnboarding({ email, displayName, currency, language, needsLanguage, needsName, needsCurrency, languageChanged, saved }: { email: string; displayName: string; currency?: Currency; language?: AppLanguage; needsLanguage: boolean; needsName: boolean; needsCurrency: boolean; languageChanged: (language: AppLanguage) => void; saved: (user: User) => void }) {
+  const { t } = useI18n();
+  const steps = ([needsLanguage && "language", needsName && "name", needsCurrency && "currency"].filter(Boolean)) as Array<"language" | "name" | "currency">;
+  const [stepIndex, setStepIndex] = useState(0);
+  const step = steps[stepIndex];
   const [name, setName] = useState(displayName);
   const [selectedCurrency, setSelectedCurrency] = useState<Currency | undefined>(currency);
+  const [selectedLanguage, setSelectedLanguage] = useState<AppLanguage | undefined>(language);
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);
   const [error, setError] = useState("");
   const persist = async () => {
     const clean = name.trim().replace(/\s+/g, " ");
-    if (!supabase || (needsName && clean.length < 2) || !selectedCurrency || savingRef.current) return;
+    if (!supabase || (needsName && clean.length < 2) || (needsCurrency && !selectedCurrency) || !selectedLanguage || savingRef.current) return;
     savingRef.current = true;
     setSaving(true);
     setError("");
     const { data, error: updateError } = await supabase.auth.updateUser({
       data: {
         ...(needsName ? { full_name: clean, name: clean } : {}),
-        currency: selectedCurrency,
+        ...(needsCurrency ? { currency: selectedCurrency } : {}),
+        language: selectedLanguage,
         needs_name: false,
       },
     });
@@ -356,32 +383,37 @@ function PreferencesOnboarding({ email, displayName, currency, saved }: { email:
     savingRef.current = false;
     saved(data.user);
   };
-  const totalSteps = needsName && needsCurrency ? 2 : 1;
-  const currentStep = totalSteps === 2 && step === "currency" ? 2 : 1;
+  const totalSteps = steps.length;
+  const currentStep = stepIndex + 1;
+  const continueFlow = () => {
+    if (step === "language" && selectedLanguage) languageChanged(selectedLanguage);
+    if (stepIndex < steps.length - 1) { setError(""); setStepIndex((current) => current + 1); }
+    else void persist();
+  };
   return (
     <div className="fixed inset-0 z-[120] grid place-items-center bg-black/55 p-5">
       <section className="theme-card w-full max-w-sm rounded-[30px] bg-white p-6 text-center shadow-2xl">
         <div className="mx-auto grid h-16 w-16 place-items-center rounded-[22px] bg-[#e5f3ea] text-[#176b46]">
           <UserRound size={31}/>
         </div>
-        <p className="mt-5 text-xs font-bold uppercase tracking-[.16em] text-[#718078]">Paso {currentStep} de {totalSteps}</p>
-        {step === "name" ? <>
-          <h2 className="mt-2 text-3xl font-bold tracking-[-.03em]">¿Cómo te llamas?</h2>
-          <p className="mt-2 text-sm text-[#587067]">Usaremos tu nombre para personalizar tu experiencia.</p>
-          <label htmlFor="welcome-name" className="mt-6 block text-left text-sm font-bold">Tu nombre</label>
-          <input id="welcome-name" autoFocus required minLength={2} maxLength={50} autoComplete="name" value={name} onChange={(event) => setName(event.target.value)} placeholder="Ej. Oliver" className="theme-card mt-2 min-h-14 w-full rounded-2xl border border-black/10 bg-white px-4 text-base outline-none focus:border-[#176b46]"/>
+        <p className="mt-5 text-xs font-bold uppercase tracking-[.16em] text-[#718078]">{t("onboarding.step", { current: currentStep, total: totalSteps })}</p>
+        {step === "language" ? <><h2 className="mt-2 text-2xl font-bold tracking-[-.03em]">{t("onboarding.chooseLanguage")}</h2><div className="mt-5 overflow-hidden rounded-2xl border border-black/[.06] text-left">{([ ["es", "🇪🇸", "Español"], ["en", "🇬🇧", "English"], ["fr", "🇫🇷", "Français"], ["de", "🇩🇪", "Deutsch"] ] as Array<[AppLanguage, string, string]>).map(([code, flag, label]) => <button key={code} type="button" onClick={() => { setSelectedLanguage(code); languageChanged(code); }} className={`flex min-h-16 w-full items-center gap-3 border-b border-black/[.06] px-4 last:border-0 ${selectedLanguage === code ? "bg-[#e6f3ec]" : ""}`}><span className="text-2xl">{flag}</span><b className="flex-1">{label}</b>{selectedLanguage === code && <CheckCircle2 className="text-[#176b46]" size={21}/>}</button>)}</div></> : step === "name" ? <>
+          <h2 className="mt-2 text-3xl font-bold tracking-[-.03em]">{t("onboarding.nameTitle")}</h2>
+          <p className="mt-2 text-sm text-[#587067]">{t("onboarding.nameHint")}</p>
+          <label htmlFor="welcome-name" className="mt-6 block text-left text-sm font-bold">{t("onboarding.yourName")}</label>
+          <input id="welcome-name" autoFocus required minLength={2} maxLength={50} autoComplete="name" value={name} onChange={(event) => setName(event.target.value)} placeholder={t("onboarding.namePlaceholder")} className="theme-card mt-2 min-h-14 w-full rounded-2xl border border-black/10 bg-white px-4 text-base outline-none focus:border-[#176b46]"/>
         </> : <>
-          <h2 className="mt-2 text-2xl font-bold tracking-[-.03em]">¿Cuál es tu moneda principal?</h2>
-          <p className="mt-2 text-sm text-[#587067]">La usaremos para mostrar y registrar tus montos.</p>
+          <h2 className="mt-2 text-2xl font-bold tracking-[-.03em]">{t("onboarding.currencyTitle")}</h2>
+          <p className="mt-2 text-sm text-[#587067]">{t("onboarding.currencyHint")}</p>
           <div className="mt-5 overflow-hidden rounded-2xl border border-black/[.06] text-left">
-            {([ ["CLP", "🇨🇱", "Peso chileno"], ["MXN", "🇲🇽", "Peso mexicano"], ["USD", "🇺🇸", "Dólar estadounidense"], ["EUR", "🇪🇺", "Euro"] ] as Array<[Currency, string, string]>).map(([code, flag, label]) => <button key={code} type="button" onClick={() => setSelectedCurrency(code)} className={`flex min-h-16 w-full items-center gap-3 border-b border-black/[.06] px-4 last:border-0 ${selectedCurrency === code ? "bg-[#e6f3ec]" : ""}`}><span className="text-2xl">{flag}</span><span className="min-w-0 flex-1"><b className="block">{code}</b><small className="text-[#718078]">{label}</small></span>{selectedCurrency === code ? <CheckCircle2 className="text-[#176b46]" size={21}/> : <span className="h-5 w-5 rounded-full border border-[#91a098]"/>}</button>)}
+            {([ ["CLP", "🇨🇱"], ["MXN", "🇲🇽"], ["USD", "🇺🇸"], ["EUR", "🇪🇺"] ] as Array<[Currency, string]>).map(([code, flag]) => <button key={code} type="button" onClick={() => setSelectedCurrency(code)} className={`flex min-h-16 w-full items-center gap-3 border-b border-black/[.06] px-4 last:border-0 ${selectedCurrency === code ? "bg-[#e6f3ec]" : ""}`}><span className="text-2xl">{flag}</span><span className="min-w-0 flex-1"><b className="block">{code}</b><small className="text-[#718078]">{t(`currency.${code}` as "currency.CLP")}</small></span>{selectedCurrency === code ? <CheckCircle2 className="text-[#176b46]" size={21}/> : <span className="h-5 w-5 rounded-full border border-[#91a098]"/>}</button>)}
           </div>
         </>}
         {error && <p role="alert" className="mt-3 rounded-xl bg-red-50 p-3 text-left text-sm text-red-700">{error}</p>}
-        <button type="button" onClick={() => { if (step === "name" && needsCurrency) { setError(""); setStep("currency"); } else { void persist(); } }} disabled={saving || (step === "name" ? name.trim().length < 2 : !selectedCurrency)} className="mt-4 flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-[#176b46] px-4 font-bold text-white disabled:opacity-50">
-          {saving && <LoaderCircle className="animate-spin" size={20}/>} {saving ? "Guardando..." : step === "name" && needsCurrency ? "Continuar" : "Comenzar"}
+        <button type="button" onClick={continueFlow} disabled={saving || (step === "language" ? !selectedLanguage : step === "name" ? name.trim().length < 2 : !selectedCurrency)} className="mt-4 flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-[#176b46] px-4 font-bold text-white disabled:opacity-50">
+          {saving && <LoaderCircle className="animate-spin" size={20}/>} {saving ? t("common.saving") : stepIndex < steps.length - 1 ? t("onboarding.continue") : t("onboarding.start")}
         </button>
-        {email && <p className="mt-4 truncate text-xs text-[#718078]">Cuenta: {email}</p>}
+        {email && <p className="mt-4 truncate text-xs text-[#718078]">{t("onboarding.account", { email })}</p>}
       </section>
     </div>
   );
@@ -432,6 +464,7 @@ function Finances({
   preferencesChanged: (user: User) => void;
   openPurchases: () => void;
 }) {
+  const { t, count, formatDate, language } = useI18n();
   const today = new Date();
   const month = data.expenses.filter((e) => {
     const d = new Date(e.date);
@@ -450,10 +483,10 @@ function Finances({
       <header className="flex items-center px-5 pb-5 pt-[max(2rem,env(safe-area-inset-top))]">
         <div className="flex-1">
           <p className="text-[13px] font-bold uppercase tracking-[.18em] text-[#6f8278]">
-            {displayName ? `Hola, ${displayName.split(/\s+/)[0]}` : "Tu dinero"}
+            {displayName ? t("finance.greeting", { name: displayName.split(/\s+/)[0] }) : t("finance.fallbackGreeting")}
           </p>
           <h1 className="mt-1 text-[30px] font-bold leading-tight tracking-[-.02em]">
-            Finanzas
+            {t("finance.title")}
           </h1>
         </div>
         <div className="flex items-center gap-2.5">
@@ -467,6 +500,7 @@ function Finances({
             displayName={displayName}
             currency={currency}
             theme={theme}
+            language={language}
             onPreferencesChanged={preferencesChanged}
             onAccountChanged={() => {
               reload().catch(() => undefined);
@@ -475,19 +509,19 @@ function Finances({
         </div>
       </header>
       <section className="mx-4 min-w-0 rounded-[24px] border border-[#4fc187]/20 bg-[#101a14] px-5 py-4 text-white shadow-[0_8px_22px_rgba(0,0,0,.08)]">
-        <p className="text-xs font-medium text-white/60">Gastado este mes</p>
+        <p className="text-xs font-medium text-white/60">{t("finance.monthSpent")}</p>
         <p className="mt-1.5 truncate text-[clamp(1.75rem,8vw,2.25rem)] font-bold leading-none tracking-[-.035em]">{formatCurrency(total, currency)}</p>
         <div className="mt-3 grid grid-cols-2 gap-3 border-t border-white/10 pt-3">
           <span className="text-xs text-white/60">
-            Esta semana{" "}
+            {t("finance.thisWeek")}{" "}
             <b className="mt-0.5 block text-sm text-white">
               {formatCurrency(week, currency)}
             </b>
           </span>
           <span className="text-xs text-white/60">
-            Movimientos{" "}
+            {t("finance.movements")}{" "}
             <b className="mt-0.5 block text-sm text-white">
-              {month.length} gastos
+              {count("finance.expense", month.length)}
             </b>
           </span>
         </div>
@@ -501,20 +535,20 @@ function Finances({
         />
         <section className="min-w-0">
           <div className="mb-3 flex items-end justify-between gap-3 px-1">
-            <div><p className="text-xs font-bold uppercase tracking-[.15em] text-[#718078]">Historial</p><h2 className="mt-1 text-xl font-bold">Compras recientes</h2></div>
-            <button type="button" onClick={openPurchases} className="min-h-10 shrink-0 rounded-xl px-2 text-sm font-bold text-[#176b46]">Ver todas</button>
+            <div><p className="text-xs font-bold uppercase tracking-[.15em] text-[#718078]">{t("finance.history")}</p><h2 className="mt-1 text-xl font-bold">{t("finance.recentPurchases")}</h2></div>
+            <button type="button" onClick={openPurchases} className="min-h-10 shrink-0 rounded-xl px-2 text-sm font-bold text-[#176b46]">{t("finance.viewAll")}</button>
           </div>
           <div className="theme-card overflow-hidden rounded-[22px] border border-black/[.06] bg-white shadow-sm">
             {recentPurchases.length ? recentPurchases.map((item) => (
               <button key={item.id} type="button" onClick={openPurchases} className="flex min-h-[68px] w-full min-w-0 items-center gap-3 border-b border-black/[.06] px-4 py-3 text-left last:border-0">
                 <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#e3f2e9] text-xl">{categoryEmoji(item.category)}</span>
-                <span className="min-w-0 flex-1"><b className="block truncate text-sm">{item.title}</b><small className="mt-0.5 block text-xs text-[#718078]">{new Date(item.date).toLocaleDateString("es-CL", { day: "numeric", month: "short" }).replace(".", "")}</small></span>
+                <span className="min-w-0 flex-1"><b className="block truncate text-sm">{item.title}</b><small className="mt-0.5 block text-xs text-[#718078]">{formatDate(item.date, { day: "numeric", month: "short" }).replace(".", "")}</small></span>
                 <span className="shrink-0 text-right"><b className="block whitespace-nowrap text-sm">{formatCurrency(item.amount, currency)}</b><ChevronRight className="ml-auto mt-1 text-[#91a098]" size={16}/></span>
               </button>
             )) : (
               <button type="button" onClick={openPurchases} className="flex min-h-20 w-full items-center gap-3 px-4 text-left">
                 <span className="grid h-10 w-10 place-items-center rounded-xl bg-[#e3f2e9] text-[#176b46]"><ReceiptText size={20}/></span>
-                <span className="min-w-0 flex-1"><b className="block text-sm">Aún no tienes compras</b><small className="text-xs text-[#718078]">Aquí aparecerán tus movimientos recientes.</small></span><ChevronRight className="text-[#91a098]" size={20}/>
+                <span className="min-w-0 flex-1"><b className="block text-sm">{t("finance.noPurchases")}</b><small className="text-xs text-[#718078]">{t("finance.noPurchasesHint")}</small></span><ChevronRight className="text-[#91a098]" size={20}/>
               </button>
             )}
           </div>

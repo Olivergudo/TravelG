@@ -1,5 +1,6 @@
 import { supabase } from "@/lib/supabase";
 import { parseRecipeGenerationResult, type RecipeGenerationResult } from "./types";
+import type { AppLanguage } from "@/lib/i18n";
 
 export const RecipeService = {
   async generate(input: {
@@ -7,6 +8,7 @@ export const RecipeService = {
     preferences: string[];
     craving?: string;
     ingredientMode: "available_only" | "allow_extras";
+    language: AppLanguage;
     availableIngredients: Array<{ name: string; quantity?: number; unit?: string }>;
   }): Promise<RecipeGenerationResult> {
     const token = (await supabase?.auth.getSession())?.data.session

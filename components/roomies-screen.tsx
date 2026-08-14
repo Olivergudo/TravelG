@@ -29,6 +29,7 @@ import {
 } from "@/lib/roomies/repository";
 import type { Household, HouseholdMember, ReplacementDebt, RoomieMessage } from "@/lib/roomies/types";
 import { enableRoomieNotifications, notifyRoomieEvent } from "@/lib/roomies/push-client";
+import { useI18n } from "@/lib/i18n";
 
 type RoomiesData = Awaited<ReturnType<typeof loadRoomies>>;
 type Sheet = "create" | "join" | "household" | "actions" | "request" | "taken" | "purchased" | null;
@@ -40,6 +41,7 @@ export function RoomiesScreen({
   userId: string;
   onAttentionChange: (count: number) => void;
 }) {
+  const { t } = useI18n();
   const [data, setData] = useState<RoomiesData>({ household: null, members: [], messages: [], debts: [] });
   const [ready, setReady] = useState(false);
   const [error, setError] = useState("");
@@ -86,8 +88,8 @@ export function RoomiesScreen({
     <section className="min-h-dvh pb-24">
       <RoomiesHeader household={data.household} members={data.members} openMenu={() => setSheet("household")} />
       <div className="mx-4 grid grid-cols-2 rounded-2xl bg-black/[.045] p-1 dark:bg-white/[.045]">
-        <button type="button" onClick={() => setView("chat")} className={`min-h-11 rounded-xl text-sm font-bold ${view === "chat" ? "theme-card bg-white text-[#176b46] shadow-sm" : "text-[#718078]"}`}>Chat</button>
-        <button type="button" onClick={() => setView("pending")} className={`min-h-11 rounded-xl text-sm font-bold ${view === "pending" ? "theme-card bg-white text-[#176b46] shadow-sm" : "text-[#718078]"}`}>Pendientes</button>
+        <button type="button" onClick={() => setView("chat")} className={`min-h-11 rounded-xl text-sm font-bold ${view === "chat" ? "theme-card bg-white text-[#176b46] shadow-sm" : "text-[#718078]"}`}>{t("roomies.chat")}</button>
+        <button type="button" onClick={() => setView("pending")} className={`min-h-11 rounded-xl text-sm font-bold ${view === "pending" ? "theme-card bg-white text-[#176b46] shadow-sm" : "text-[#718078]"}`}>{t("roomies.pending")}</button>
       </div>
       {error && <p role="alert" className="mx-4 mt-3 rounded-2xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}
       <NotificationPrompt />
@@ -117,15 +119,16 @@ function ScreenLoader() {
 }
 
 function RoomiesWelcome({ error, open, reload, sheet }: { error: string; open: (sheet: Sheet) => void; reload: () => Promise<void>; sheet: Sheet }) {
+  const { t } = useI18n();
   return (
     <section className="grid min-h-[calc(100dvh-5rem)] place-items-center px-5 pb-20 pt-[max(2rem,env(safe-area-inset-top))]">
       <div className="w-full max-w-sm text-center">
         <div className="mx-auto grid h-20 w-20 place-items-center rounded-[26px] bg-[#e3f2e9] text-[#176b46]"><Home size={38}/></div>
         <p className="mt-6 text-xs font-extrabold uppercase tracking-[.2em] text-[#6f8278]">Roomies</p>
-        <h1 className="mt-2 text-3xl font-bold tracking-[-.03em]">Comparte y organiza las cosas de casa.</h1>
+        <h1 className="mt-2 text-3xl font-bold tracking-[-.03em]">{t("roomies.tagline")}</h1>
         {error && <p role="alert" className="mt-4 rounded-2xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}
-        <button type="button" onClick={() => open("create")} className="mt-7 min-h-14 w-full rounded-2xl bg-[#176b46] px-4 font-bold text-white">Crear hogar</button>
-        <button type="button" onClick={() => open("join")} className="theme-card mt-3 min-h-14 w-full rounded-2xl border border-black/10 bg-white px-4 font-bold text-[#176b46]">Unirme a un hogar</button>
+        <button type="button" onClick={() => open("create")} className="mt-7 min-h-14 w-full rounded-2xl bg-[#176b46] px-4 font-bold text-white">{t("roomies.create")}</button>
+        <button type="button" onClick={() => open("join")} className="theme-card mt-3 min-h-14 w-full rounded-2xl border border-black/10 bg-white px-4 font-bold text-[#176b46]">{t("roomies.join")}</button>
       </div>
       {sheet && <OnboardingSheet sheet={sheet} close={() => open(null)} completed={reload}/>}
     </section>
@@ -157,17 +160,19 @@ function OnboardingSheet({ sheet, close, completed }: { sheet: Sheet; close: () 
 }
 
 function RoomiesHeader({ household, members, openMenu }: { household: Household; members: HouseholdMember[]; openMenu: () => void }) {
+  const { t } = useI18n();
   const [copied, setCopied] = useState(false);
   return <header className="px-5 pb-5 pt-[max(2rem,env(safe-area-inset-top))]">
     <p className="text-xs font-extrabold uppercase tracking-[.2em] text-[#6f8278]">Roomies</p>
     <div className="mt-1 flex items-start justify-between gap-3">
       <div className="min-w-0"><h1 className="truncate text-[30px] font-bold tracking-[-.03em]">{household.name}</h1><p className="mt-1 line-clamp-2 text-sm text-[#718078]">{members.map((member) => member.display_name).join(" · ")}</p></div>
-      <div className="flex shrink-0 gap-2"><button type="button" onClick={async () => { await navigator.clipboard.writeText(household.invite_code); setCopied(true); window.setTimeout(() => setCopied(false), 1500); }} className="theme-card flex min-h-11 items-center gap-2 rounded-xl border border-black/[.07] bg-white px-3 text-xs font-bold text-[#176b46]" aria-label="Copiar código de invitación"><Copy size={16}/>{copied ? "Copiado" : household.invite_code}</button><button type="button" onClick={openMenu} aria-label="Ver participantes y opciones del hogar" className="theme-card grid h-11 w-11 place-items-center rounded-xl border border-black/[.07] bg-white text-[#176b46]"><Users size={20}/></button></div>
+      <div className="flex shrink-0 gap-2"><button type="button" onClick={async () => { await navigator.clipboard.writeText(household.invite_code); setCopied(true); window.setTimeout(() => setCopied(false), 1500); }} className="theme-card flex min-h-11 items-center gap-2 rounded-xl border border-black/[.07] bg-white px-3 text-xs font-bold text-[#176b46]" aria-label={t("roomies.copyInvite")}><Copy size={16}/>{copied ? t("roomies.copied") : household.invite_code}</button><button type="button" onClick={openMenu} aria-label={t("roomies.viewMembers")} className="theme-card grid h-11 w-11 place-items-center rounded-xl border border-black/[.07] bg-white text-[#176b46]"><Users size={20}/></button></div>
     </div>
   </header>;
 }
 
 function ChatView({ userId, data, openActions, reload }: { userId: string; data: RoomiesData; openActions: () => void; reload: () => Promise<void> }) {
+  const { t } = useI18n();
   const [message, setMessage] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
@@ -183,33 +188,36 @@ function ChatView({ userId, data, openActions, reload }: { userId: string; data:
   };
   return <div className="px-4 pb-24">
     <div className="mt-4 min-h-[36dvh] space-y-3 pb-4">
-      {data.messages.length === 0 && <Empty icon={<MessageCircle/>} title="El chat está listo" text="Envía un mensaje o registra una acción con el botón +."/>}
+      {data.messages.length === 0 && (
+        <Empty icon={<MessageCircle/>} title={t("roomies.chat")} text={t("roomies.tagline")}/>
+      )}
       {data.messages.map((item) => <MessageCard key={item.id} item={item} mine={item.user_id === userId} actor={names.get(item.user_id) || "Roomie"} names={names} userId={userId} householdId={data.household!.id} reload={reload}/>) }
       <div ref={endRef}/>
     </div>
     {error && <p role="alert" className="mt-3 text-sm text-red-600">{error}</p>}
     <div className="theme-card fixed inset-x-4 bottom-[calc(5rem+env(safe-area-inset-bottom)+10px)] z-20 mx-auto flex max-w-[calc(42rem-2rem)] items-center gap-2 rounded-2xl border border-black/[.07] bg-white p-2 shadow-[0_8px_24px_rgba(0,0,0,.09)]">
       <button type="button" onClick={openActions} aria-label="Acciones especiales" className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-[#e3f2e9] text-[#176b46]"><Plus/></button>
-      <input value={message} onChange={(event) => setMessage(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void submit(); }} maxLength={1000} placeholder="Escribe un mensaje..." className="min-w-0 flex-1 bg-transparent px-1 text-base outline-none"/>
-      <button type="button" onClick={() => void submit()} disabled={!message.trim() || sending} aria-label="Enviar" className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-[#176b46] text-white disabled:opacity-40">{sending ? <LoaderCircle className="animate-spin" size={19}/> : <Send size={19}/>}</button>
+      <input data-i18n-ignore value={message} onChange={(event) => setMessage(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void submit(); }} maxLength={1000} placeholder={t("roomies.typeMessage")} className="min-w-0 flex-1 bg-transparent px-1 text-base outline-none"/>
+      <button type="button" onClick={() => void submit()} disabled={!message.trim() || sending} aria-label={t("roomies.send")} className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-[#176b46] text-white disabled:opacity-40">{sending ? <LoaderCircle className="animate-spin" size={19}/> : <Send size={19}/>}</button>
     </div>
   </div>;
 }
 
 function MessageCard({ item, mine, actor, names, userId, householdId, reload }: { item: RoomieMessage; mine: boolean; actor: string; names: Map<string, string>; userId: string; householdId: string; reload: () => Promise<void> }) {
+  const { t } = useI18n();
   const metadata = item.metadata;
   const product = String(metadata.productName || "producto");
   const owner = names.get(String(metadata.ownerUserId || "")) || "otro roomie";
   const event = item.type !== "message";
   const [sending, setSending] = useState(false);
   let text = item.message || "";
-  if (item.type === "product_request") text = `¿Alguien tiene ${product}?`;
-  if (item.type === "product_available") text = `${actor} tiene ${product}`;
-  if (item.type === "product_taken") text = `${actor} tomó ${product} de ${owner}. ${metadata.needsReplacement ? "Debe reponerlo." : "No requiere reposición."}`;
-  if (item.type === "product_purchased") text = `${actor} compró ${product} · ${metadata.target === "all" ? "Para todos" : metadata.target === "self" ? "Para sí" : `Para ${names.get(String(metadata.targetUserId)) || "un roomie"}`}`;
-  if (item.type === "replacement_reported") text = `${actor} dice que ya repuso ${product}.`;
-  if (item.type === "replacement_confirmed") text = `${actor} confirmó la reposición de ${product}.`;
-  if (item.type === "replacement_rejected") text = `La reposición de ${product} todavía está pendiente.`;
+  if (item.type === "product_request") text = t("roomies.event.request", { product });
+  if (item.type === "product_available") text = t("roomies.event.available", { actor, product });
+  if (item.type === "product_taken") text = t(metadata.needsReplacement ? "roomies.event.takenReplace" : "roomies.event.takenNoReplace", { actor, product, owner });
+  if (item.type === "product_purchased") text = t(metadata.target === "all" ? "roomies.event.boughtAll" : metadata.target === "self" ? "roomies.event.boughtSelf" : "roomies.event.boughtMember", { actor, product, target: names.get(String(metadata.targetUserId)) || "Roomie" });
+  if (item.type === "replacement_reported") text = t("roomies.event.reported", { actor, product });
+  if (item.type === "replacement_confirmed") text = t("roomies.event.confirmed", { actor, product });
+  if (item.type === "replacement_rejected") text = t("roomies.event.rejected", { product });
   const answer = async () => {
     setSending(true);
     try { const id = await createEvent(householdId, "product_available", { requestId: item.id, productName: product }); await notifyRoomieEvent(id); await reload(); }
@@ -217,7 +225,7 @@ function MessageCard({ item, mine, actor, names, userId, householdId, reload }: 
   };
   return <article className={`${event ? "theme-card border border-[#176b46]/15 bg-white" : mine ? "ml-12 bg-[#176b46] text-white" : "theme-card mr-12 bg-white"} rounded-2xl px-4 py-3 shadow-sm`}>
     <p className={`text-xs font-bold ${mine && !event ? "text-white/70" : "text-[#176b46]"}`}>{event ? eventLabel(item.type, actor) : actor}</p>
-    <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed">{text}</p>
+    <p data-i18n-ignore={item.type === "message" ? "true" : undefined} className="mt-1 whitespace-pre-wrap text-sm leading-relaxed">{text}</p>
     {item.type === "product_request" && item.user_id !== userId && <button type="button" disabled={sending} onClick={() => void answer()} className="mt-3 min-h-10 rounded-xl bg-[#e3f2e9] px-4 text-sm font-bold text-[#176b46] disabled:opacity-50">Yo tengo</button>}
     <time className={`mt-1 block text-[11px] ${mine && !event ? "text-white/55" : "text-[#839087]"}`}>{new Date(item.created_at).toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" })}</time>
   </article>;
@@ -234,6 +242,7 @@ function eventLabel(type: RoomieMessage["type"], actor: string) {
 }
 
 function DebtsView({ userId, data, reload }: { userId: string; data: RoomiesData; reload: () => Promise<void> }) {
+  const { t } = useI18n();
   const initialResolved = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("view") === "resolved";
   const [resolved, setResolved] = useState(initialResolved);
   const [busy, setBusy] = useState("");
@@ -247,32 +256,36 @@ function DebtsView({ userId, data, reload }: { userId: string; data: RoomiesData
     finally { setBusy(""); }
   };
   return <div className="px-4 pb-4">
-    <div className="mt-4 flex gap-2"><button type="button" onClick={() => setResolved(false)} className={`min-h-10 rounded-full px-4 text-sm font-bold ${!resolved ? "bg-[#176b46] text-white" : "theme-card bg-white text-[#718078]"}`}>Activos</button><button type="button" onClick={() => setResolved(true)} className={`min-h-10 rounded-full px-4 text-sm font-bold ${resolved ? "bg-[#176b46] text-white" : "theme-card bg-white text-[#718078]"}`}>Resueltos</button></div>
+    <div className="mt-4 flex gap-2"><button type="button" onClick={() => setResolved(false)} className={`min-h-10 rounded-full px-4 text-sm font-bold ${!resolved ? "bg-[#176b46] text-white" : "theme-card bg-white text-[#718078]"}`}>{t("roomies.active")}</button><button type="button" onClick={() => setResolved(true)} className={`min-h-10 rounded-full px-4 text-sm font-bold ${resolved ? "bg-[#176b46] text-white" : "theme-card bg-white text-[#718078]"}`}>{t("roomies.resolved")}</button></div>
     {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
     <div className="mt-4 space-y-3">
-      {debts.length === 0 && <Empty icon={<PackageCheck/>} title={resolved ? "Sin reposiciones resueltas" : "Todo está al día"} text={resolved ? "Aquí aparecerá el historial confirmado." : "No hay productos pendientes de reposición."}/>}
+      {debts.length === 0 && (
+        <Empty icon={<PackageCheck/>} title={resolved ? t("roomies.noResolved") : t("roomies.allGood")} text={resolved ? t("roomies.resolvedHistory") : t("roomies.noPendingProducts")}/>
+      )}
       {debts.map((debt) => <article key={debt.id} className="theme-card rounded-[22px] border border-black/[.06] bg-white p-4 shadow-sm">
         <div className="flex items-start gap-3"><div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-[#e3f2e9] text-[#176b46]">🥛</div><div className="min-w-0 flex-1"><h3 className="font-bold">{debt.product_name}</h3><p className="text-sm text-[#718078]">{names.get(debt.debtor_user_id)} → {names.get(debt.owner_user_id)}</p></div></div>
-        <p className="mt-3 text-sm font-semibold text-[#176b46]">{debt.status === "pending" ? "Pendiente de reposición" : debt.status === "awaiting_confirmation" ? `Esperando confirmación de ${names.get(debt.owner_user_id)}` : "Reposición confirmada"}</p>
+        <p className="mt-3 text-sm font-semibold text-[#176b46]">{debt.status === "pending" ? t("roomies.pendingReplacement") : debt.status === "awaiting_confirmation" ? t("roomies.waiting", { name: names.get(debt.owner_user_id) || "" }) : t("roomies.resolved")}</p>
         <p className="mt-1 text-xs text-[#839087]">{relativeDate(debt.resolved_at || debt.created_at)}</p>
         {debt.status === "pending" && debt.debtor_user_id === userId && <button type="button" disabled={busy !== ""} onClick={() => void act(debt, "report")} className="mt-4 min-h-11 w-full rounded-xl bg-[#176b46] font-bold text-white">Ya lo repuse</button>}
-        {debt.status === "awaiting_confirmation" && debt.owner_user_id === userId && <div className="mt-4 grid grid-cols-2 gap-2"><button type="button" disabled={busy !== ""} onClick={() => void act(debt, "confirm")} className="min-h-11 rounded-xl bg-[#176b46] px-2 text-sm font-bold text-white">Confirmar reposición</button><button type="button" disabled={busy !== ""} onClick={() => void act(debt, "reject")} className="theme-card min-h-11 rounded-xl border border-black/10 bg-white px-2 text-sm font-bold">Aún no</button></div>}
+        {debt.status === "awaiting_confirmation" && debt.owner_user_id === userId && <div className="mt-4 grid grid-cols-2 gap-2"><button type="button" disabled={busy !== ""} onClick={() => void act(debt, "confirm")} className="min-h-11 rounded-xl bg-[#176b46] px-2 text-sm font-bold text-white">{t("roomies.confirmReplacement")}</button><button type="button" disabled={busy !== ""} onClick={() => void act(debt, "reject")} className="theme-card min-h-11 rounded-xl border border-black/10 bg-white px-2 text-sm font-bold">{t("roomies.notYet")}</button></div>}
       </article>)}
     </div>
   </div>;
 }
 
 function RoomieSheet({ sheet, close, next, household, members, debts, userId, completed }: { sheet: Sheet; close: () => void; next: (sheet: Sheet) => void; household: Household; members: HouseholdMember[]; debts: ReplacementDebt[]; userId: string; completed: () => Promise<void> }) {
+  const { t } = useI18n();
   if (sheet === "household") return <HouseholdMenu household={household} members={members} userId={userId} close={close} completed={completed}/>;
-  if (sheet === "actions") return <SheetFrame title="¿Qué quieres hacer?" close={close}>
-    <Action icon={<Search/>} label="Preguntar si alguien tiene" click={() => next("request")}/>
-    <Action icon={<PackageCheck/>} label="Avisar que tomé algo" click={() => next("taken")}/>
-    <Action icon={<ShoppingCart/>} label="Avisar que compré algo" click={() => next("purchased")}/>
+  if (sheet === "actions") return <SheetFrame title={t("roomies.actions")} close={close}>
+    <Action icon={<Search/>} label={t("roomies.ask")} click={() => next("request")}/>
+    <Action icon={<PackageCheck/>} label={t("roomies.taken")} click={() => next("taken")}/>
+    <Action icon={<ShoppingCart/>} label={t("roomies.purchased")} click={() => next("purchased")}/>
   </SheetFrame>;
   return <EventForm kind={sheet as "request" | "taken" | "purchased"} close={close} household={household} members={members} debts={debts} userId={userId} completed={completed}/>;
 }
 
 function HouseholdMenu({ household, members, userId, close, completed }: { household: Household; members: HouseholdMember[]; userId: string; close: () => void; completed: () => Promise<void> }) {
+  const { t, count } = useI18n();
   const [confirming, setConfirming] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const [error, setError] = useState("");
@@ -282,19 +295,19 @@ function HouseholdMenu({ household, members, userId, close, completed }: { house
     if (leaving) return;
     setLeaving(true); setError("");
     try { await leaveHousehold(household.id); close(); await completed(); }
-    catch { setError("No pudimos sacarte del hogar. Intenta nuevamente."); setLeaving(false); }
+    catch { setError(t("roomies.leaveError")); setLeaving(false); }
   };
-  if (confirming) return <SheetFrame close={() => setConfirming(false)} title="¿Salir de este hogar?">
-    <p className="text-sm leading-relaxed text-[#587067]">Dejarás de ver el chat y los pendientes de <b>{household.name}</b>. Tus datos personales de Finanzas, Lista y Refrigerador no se eliminarán.</p>
+  if (confirming) return <SheetFrame close={() => setConfirming(false)} title={t("roomies.leaveTitle")}>
+    <p className="text-sm leading-relaxed text-[#587067]">{t("roomies.leaveHint", { household: household.name })}</p>
     {ownerWithOthers && <p className="mt-3 rounded-2xl bg-[#e3f2e9] p-3 text-sm text-[#176b46]">Eres el propietario. La propiedad se transferirá automáticamente al miembro más antiguo.</p>}
-    {me?.role === "owner" && members.length === 1 && <p className="mt-3 rounded-2xl bg-[#e3f2e9] p-3 text-sm text-[#176b46]">Como eres el único participante, el hogar se eliminará.</p>}
+    {me?.role === "owner" && members.length === 1 && <p className="mt-3 rounded-2xl bg-[#e3f2e9] p-3 text-sm text-[#176b46]">{t("roomies.onlyMember")}</p>}
     {error && <p role="alert" className="mt-3 text-sm text-red-600">{error}</p>}
-    <div className="mt-5 grid grid-cols-2 gap-2"><button type="button" onClick={() => setConfirming(false)} className="theme-card min-h-12 rounded-xl border border-black/10 bg-white font-bold">Cancelar</button><button type="button" disabled={leaving} onClick={() => void leave()} className="flex min-h-12 items-center justify-center gap-2 rounded-xl bg-red-600 px-3 font-bold text-white disabled:opacity-50">{leaving ? <LoaderCircle size={18} className="animate-spin"/> : <LogOut size={18}/>} Salir</button></div>
+    <div className="mt-5 grid grid-cols-2 gap-2"><button type="button" onClick={() => setConfirming(false)} className="theme-card min-h-12 rounded-xl border border-black/10 bg-white font-bold">{t("common.cancel")}</button><button type="button" disabled={leaving} onClick={() => void leave()} className="flex min-h-12 items-center justify-center gap-2 rounded-xl bg-red-600 px-3 font-bold text-white disabled:opacity-50">{leaving ? <LoaderCircle size={18} className="animate-spin"/> : <LogOut size={18}/>} {t("roomies.leaveConfirm")}</button></div>
   </SheetFrame>;
-  return <SheetFrame close={close} title="Participantes">
-    <p className="-mt-3 mb-4 text-sm text-[#718078]">{household.name} · {members.length} {members.length === 1 ? "persona" : "personas"}</p>
-    <div className="overflow-hidden rounded-2xl border border-black/[.06]">{members.map((member) => <div key={member.id} className="theme-card flex min-h-16 items-center gap-3 border-b border-black/[.06] bg-white px-4 last:border-0"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#e3f2e9] font-bold text-[#176b46]">{member.display_name.trim().charAt(0).toUpperCase()}</span><span className="min-w-0 flex-1"><b className="block truncate">{member.display_name}{member.user_id === userId ? " · Tú" : ""}</b><small className="text-[#718078]">{member.role === "owner" ? "Propietario" : "Miembro"}</small></span>{member.role === "owner" && <span className="rounded-full bg-[#e3f2e9] px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-[#176b46]">Owner</span>}</div>)}</div>
-    <button type="button" onClick={() => setConfirming(true)} className="mt-5 flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl border border-red-500/25 text-sm font-bold text-red-600"><LogOut size={18}/> Salir del hogar</button>
+  return <SheetFrame close={close} title={t("roomies.participants")}>
+    <p className="-mt-3 mb-4 text-sm text-[#718078]">{household.name} · {count("roomies.person", members.length)}</p>
+    <div className="overflow-hidden rounded-2xl border border-black/[.06]">{members.map((member) => <div key={member.id} className="theme-card flex min-h-16 items-center gap-3 border-b border-black/[.06] bg-white px-4 last:border-0"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#e3f2e9] font-bold text-[#176b46]">{member.display_name.trim().charAt(0).toUpperCase()}</span><span className="min-w-0 flex-1"><b className="block truncate">{member.display_name}{member.user_id === userId ? ` · ${t("roomies.you")}` : ""}</b><small className="text-[#718078]">{member.role === "owner" ? t("roomies.owner") : t("roomies.member")}</small></span>{member.role === "owner" && <span className="rounded-full bg-[#e3f2e9] px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-[#176b46]">{t("roomies.owner")}</span>}</div>)}</div>
+    <button type="button" onClick={() => setConfirming(true)} className="mt-5 flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl border border-red-500/25 text-sm font-bold text-red-600"><LogOut size={18}/> {t("roomies.leave")}</button>
   </SheetFrame>;
 }
 
@@ -335,14 +348,15 @@ function EventForm({ kind, close, household, members, debts, userId, completed }
 }
 
 function NotificationPrompt() {
+  const { t } = useI18n();
   const [state, setState] = useState<"hidden" | "ready" | "saving" | "done" | "error">(() =>
     typeof window !== "undefined" && "Notification" in window && Notification.permission !== "granted" && localStorage.getItem("roomies-push-dismissed") !== "1" ? "ready" : "hidden",
   );
   if (state === "hidden" || state === "done") return null;
   return <aside className="theme-card mx-4 mt-4 rounded-[22px] border border-[#176b46]/15 bg-white p-4 shadow-sm">
-    <div className="flex gap-3"><Bell className="mt-0.5 shrink-0 text-[#176b46]"/><div><h3 className="font-bold">Recibe avisos de tus roomies</h3><p className="mt-1 text-sm text-[#718078]">Te avisaremos cuando alguien tome algo tuyo o necesite tu confirmación.</p></div></div>
+    <div className="flex gap-3"><Bell className="mt-0.5 shrink-0 text-[#176b46]"/><div><h3 className="font-bold">{t("roomies.notifications")}</h3><p className="mt-1 text-sm text-[#718078]">{t("roomies.notificationsHint")}</p></div></div>
     {state === "error" && <p className="mt-3 text-sm text-red-600">No pudimos activar las notificaciones.</p>}
-    <div className="mt-4 flex gap-2"><button type="button" disabled={state === "saving"} onClick={() => void (async () => { setState("saving"); try { await enableRoomieNotifications(); setState("done"); } catch { setState("error"); } })()} className="min-h-11 flex-1 rounded-xl bg-[#176b46] px-3 text-sm font-bold text-white">Activar notificaciones</button><button type="button" onClick={() => { localStorage.setItem("roomies-push-dismissed", "1"); setState("hidden"); }} className="min-h-11 rounded-xl px-3 text-sm text-[#718078]">Ahora no</button></div>
+    <div className="mt-4 flex gap-2"><button type="button" disabled={state === "saving"} onClick={() => void (async () => { setState("saving"); try { await enableRoomieNotifications(); setState("done"); } catch { setState("error"); } })()} className="min-h-11 flex-1 rounded-xl bg-[#176b46] px-3 text-sm font-bold text-white">{t("roomies.enableNotifications")}</button><button type="button" onClick={() => { localStorage.setItem("roomies-push-dismissed", "1"); setState("hidden"); }} className="min-h-11 rounded-xl px-3 text-sm text-[#718078]">{t("roomies.notNow")}</button></div>
   </aside>;
 }
 

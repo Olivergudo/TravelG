@@ -3,6 +3,7 @@
 import { Camera, Keyboard, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { isValidBarcode, normalizeBarcode } from "@/lib/products/barcode";
+import { useI18n } from "@/lib/i18n";
 
 type NativeDetector = {
   detect(source: HTMLVideoElement): Promise<Array<{ rawValue: string }>>;
@@ -20,9 +21,10 @@ export function BarcodeScanner({
   scanned: (code: string) => void;
   continuous?: boolean;
 }) {
+  const { t } = useI18n();
   const video = useRef<HTMLVideoElement>(null);
   const [manual, setManual] = useState("");
-  const [message, setMessage] = useState("Apunta al código de barras");
+  const [message, setMessage] = useState(t("scanner.aim"));
   useEffect(() => {
     let stopped = false;
     let stopReader: (() => void) | undefined;
@@ -72,7 +74,7 @@ export function BarcodeScanner({
         );
         stopReader = () => controls.stop();
       } catch {
-        setMessage("No pudimos abrir la cámara. Puedes escribir el código.");
+        setMessage(t("scanner.cameraError"));
       }
     };
     start();
@@ -80,12 +82,12 @@ export function BarcodeScanner({
       stopped = true;
       stopReader?.();
     };
-  }, [scanned]);
+  }, [scanned, t]);
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
     const code = normalizeBarcode(manual);
     if (isValidBarcode(code)) scanned(code);
-    else setMessage("Escribe un código válido de 8 a 14 dígitos.");
+    else setMessage(t("scanner.invalid"));
   };
   return (
     <div
@@ -97,20 +99,20 @@ export function BarcodeScanner({
         <div className="flex items-center">
           <div className="flex-1">
             <p className="text-xs font-bold uppercase tracking-[.16em] text-[#176b46]">
-              Refrigerador
+              {t("fridge.title")}
             </p>
-            <h2 className="text-2xl font-bold">Escanear producto</h2>
+            <h2 className="text-2xl font-bold">{t("scanner.title")}</h2>
           </div>
           <button
             onClick={close}
-            aria-label={continuous ? "Terminar de escanear" : "Cerrar"}
+            aria-label={continuous ? t("scanner.finishLabel") : t("common.close")}
             className={
               continuous
                 ? "min-h-11 px-3 font-bold text-[#176b46]"
                 : "grid h-11 w-11 place-items-center rounded-full bg-[#edf2ee]"
             }
           >
-            {continuous ? "Listo" : <X />}
+            {continuous ? t("scanner.finish") : <X />}
           </button>
         </div>
         <div className="relative mt-4 aspect-[4/3] overflow-hidden rounded-2xl bg-black">
@@ -131,12 +133,12 @@ export function BarcodeScanner({
               inputMode="numeric"
               value={manual}
               onChange={(e) => setManual(e.target.value)}
-              placeholder="Ingresar código"
+              placeholder={t("scanner.placeholder")}
               className="min-h-12 min-w-0 flex-1 bg-transparent outline-none"
             />
           </div>
           <button className="rounded-xl bg-[#176b46] px-4 font-semibold text-white">
-            Buscar
+            {t("scanner.search")}
           </button>
         </form>
       </section>

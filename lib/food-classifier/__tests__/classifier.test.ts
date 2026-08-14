@@ -138,7 +138,9 @@ test("formatea la moneda sin convertir el importe", () => {
 });
 
 test("el onboarding solicita únicamente las preferencias faltantes", () => {
-  assert.deepEqual(requiredPreferences({ full_name: "Oliver", currency: "CLP" }), { displayName: "Oliver", currency: "CLP", needsName: false, needsCurrency: false });
+  assert.deepEqual(requiredPreferences({ full_name: "Oliver", currency: "CLP", language: "es" }), { displayName: "Oliver", currency: "CLP", language: "es", needsLanguage: false, needsName: false, needsCurrency: false });
+  assert.equal(requiredPreferences({ full_name: "Oliver", currency: "CLP" }).needsLanguage, true);
+  assert.equal(requiredPreferences({ full_name: "Oliver", currency: "CLP", language: "it" }).needsLanguage, true);
   assert.equal(requiredPreferences({ full_name: "Oliver" }).needsCurrency, true);
   assert.equal(requiredPreferences({ currency: "MXN" }).needsName, true);
   assert.deepEqual(requiredPreferences({}).needsName, true);
