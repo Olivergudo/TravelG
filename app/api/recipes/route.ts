@@ -6,6 +6,14 @@ import { parseRecipeGenerationResult } from "@/lib/recipes/types";
 
 export const maxDuration = 30;
 
+function getDeepSeekApiKey() {
+  return [
+    process.env.DEEPSEEK_API_KEY,
+    process.env.DEEPSEEK_APIKEY,
+    process.env["DeepSeek-apikey"],
+  ].find((value) => value?.trim())?.trim();
+}
+
 const requestSchema = z.object({
   mealType: z.enum(["desayuno", "comida", "cena"]),
   preferences: z.array(z.enum(["rapido", "saludable", "economico", "sorprendeme"])).min(1).max(2),
@@ -81,7 +89,8 @@ export async function POST(request: Request) {
       { error: "Los ingredientes no son válidos." },
       { status: 400 },
     );
-  if (!process.env.DEEPSEEK_API_KEY)
+  const deepSeekApiKey = getDeepSeekApiKey();
+  if (!deepSeekApiKey)
     return Response.json(
       { error: "Falta configurar el servicio de recetas." },
       { status: 503 },
@@ -92,7 +101,7 @@ export async function POST(request: Request) {
       elapsedMs: Math.round(performance.now() - startedAt),
     });
     const client = new OpenAI({
-      apiKey: process.env.DEEPSEEK_API_KEY,
+      apiKey: deepSeekApiKey,
       baseURL: "https://api.deepseek.com",
       maxRetries: 0,
       timeout: 30_000,
