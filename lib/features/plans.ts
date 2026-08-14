@@ -1,10 +1,14 @@
 import type { User } from "@supabase/supabase-js";
 
-export type Plan = "basic" | "pro";
-export type Feature = "barcodeScanner" | "fridge" | "aiRecipes";
+import type { UserPlan } from "@/lib/auth/permissions";
+
+export type Plan = UserPlan;
+export type Feature =
+  "barcodeScanner" | "receiptScanner" | "fridge" | "aiRecipes";
 
 export const FEATURES: Record<Feature, Plan> = {
   barcodeScanner: "pro",
+  receiptScanner: "pro",
   fridge: "pro",
   aiRecipes: "pro",
 };
@@ -18,5 +22,7 @@ export function canUseFeature(user: UserEntitlements, feature: Feature) {
   const requiredPlan = FEATURES[feature];
   if (requiredPlan === "basic") return true;
   if (user.plan !== "pro") return false;
-  return !user.proExpiresAt || new Date(user.proExpiresAt).getTime() > Date.now();
+  return (
+    !user.proExpiresAt || new Date(user.proExpiresAt).getTime() > Date.now()
+  );
 }

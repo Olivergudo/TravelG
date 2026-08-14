@@ -71,7 +71,7 @@ export async function POST(request: Request) {
       { error: "Los ingredientes no son válidos." },
       { status: 400 },
     );
-  if (!process.env.OPENAI_API_KEY)
+  if (!process.env.DEEPSEEK_API_KEY)
     return Response.json(
       { error: "Falta configurar el servicio de recetas." },
       { status: 503 },
@@ -80,27 +80,26 @@ export async function POST(request: Request) {
     console.info("recipe_request_valid", {
       itemCount: parsed.data.items.length,
     });
-    const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-    const response = await client.responses.create({
-      model: process.env.OPENAI_RECIPE_MODEL || "gpt-5-mini",
-      input: [
+    const client = new OpenAI({
+      apiKey: process.env.DEEPSEEK_API_KEY,
+      baseURL: "https://api.deepseek.com",
+    });
+    const response = await client.chat.completions.create({
+      model: process.env.DEEPSEEK_RECIPE_MODEL || "deepseek-v4-flash",
+      messages: [
         {
           role: "system",
-          content:
-            "Eres un ayudante de cocina práctico. Responde en español de Chile. Propón hasta 3 recetas realistas usando principalmente lo disponible. Incluye como máximo 1 ingrediente faltante por receta y pasos breves. No inventes que el usuario posee ingredientes.",
+          content: `Eres un ayudante de cocina práctico. Responde en español de Chile y exclusivamente como JSON válido. Propón hasta 3 recetas realistas usando principalmente lo disponible. Incluye como máximo 1 ingrediente faltante por receta y pasos breves. No inventes que el usuario posee ingredientes. Usa exactamente esta estructura: ${JSON.stringify(schema)}`,
         },
         { role: "user", content: JSON.stringify(parsed.data) },
       ],
-      text: {
-        format: {
-          type: "json_schema",
-          name: "recipe_suggestions",
-          strict: true,
-          schema,
-        },
-      },
+      response_format: { type: "json_object" },
+      max_tokens: 2200,
     });
-    const result = recipeResponseSchema.parse(JSON.parse(response.output_text));
+    const content = response.choices[0]?.message.content;
+    if (!content)
+      throw new SyntaxError("DeepSeek devolvió una respuesta vacía.");
+    const result = recipeResponseSchema.parse(JSON.parse(content));
     console.info("recipe_generation_ok", {
       suggestionCount: result.suggestions.length,
     });

@@ -1,12 +1,12 @@
 "use client";
 
 import {
-  ChefHat,
   LoaderCircle,
   PackageOpen,
   Pencil,
   Plus,
   ScanBarcode,
+  Sparkles,
   Trash2,
   X,
 } from "lucide-react";
@@ -36,6 +36,7 @@ export function FridgeScreen({
     fridgeRepository.local(userId),
   );
   const [form, setForm] = useState<Partial<FridgeItem> | null>(null);
+  const [addMenu, setAddMenu] = useState(false);
   const [scanner, setScanner] = useState(false);
   const [barcode, setBarcode] = useState<string>();
   const [unknownBarcode, setUnknownBarcode] = useState(false);
@@ -166,18 +167,35 @@ export function FridgeScreen({
       <div className="space-y-5 px-4 pb-32">
         <div className="grid grid-cols-2 gap-3">
           <button
-            onClick={() => setForm({ name: "", quantity: 1, unit: "unidad" })}
+            onClick={() => {
+              setError("");
+              setAddMenu(true);
+            }}
             className="tap flex min-h-14 items-center justify-center gap-2 rounded-2xl bg-[#176b46] font-semibold text-white"
           >
             <Plus />
             Agregar
           </button>
           <button
-            onClick={() => setScanner(true)}
-            className="theme-card tap flex min-h-14 items-center justify-center gap-2 rounded-2xl border border-black/[.06] bg-white font-semibold text-[#176b46]"
+            disabled={recipeLoading}
+            aria-disabled={!items.length}
+            onClick={() => {
+              if (!items.length) {
+                setError(
+                  "Agrega algunos alimentos primero para que podamos recomendarte qué cocinar.",
+                );
+                return;
+              }
+              setRecipeSetup(true);
+            }}
+            className={`theme-card tap flex min-h-14 items-center justify-center gap-2 rounded-2xl border border-black/[.06] bg-white font-semibold text-[#176b46] disabled:opacity-60 ${!items.length ? "opacity-55" : ""}`}
           >
-            <ScanBarcode />
-            Escanear
+            {recipeLoading ? (
+              <LoaderCircle className="animate-spin" />
+            ) : (
+              <Sparkles />
+            )}
+            Cocinar
           </button>
         </div>
         {error && (
@@ -250,21 +268,20 @@ export function FridgeScreen({
             ))}
           </section>
         )}
-        {items.length > 0 && (
-          <button
-            disabled={recipeLoading}
-            onClick={() => setRecipeSetup(true)}
-            className="tap flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-[#173d2d] font-semibold text-white disabled:opacity-60"
-          >
-            {recipeLoading ? (
-              <LoaderCircle className="animate-spin" />
-            ) : (
-              <ChefHat />
-            )}
-            ¿Qué puedo cocinar?
-          </button>
-        )}
       </div>
+      {addMenu && (
+        <AddProductMenu
+          close={() => setAddMenu(false)}
+          manual={() => {
+            setAddMenu(false);
+            setForm({ name: "", quantity: 1, unit: "unidad" });
+          }}
+          scan={() => {
+            setAddMenu(false);
+            setScanner(true);
+          }}
+        />
+      )}
       {scanner && (
         <BarcodeScanner close={() => setScanner(false)} scanned={scanned} />
       )}
@@ -297,6 +314,55 @@ export function FridgeScreen({
   );
 }
 
+function AddProductMenu({
+  close,
+  manual,
+  scan,
+}: {
+  close: () => void;
+  manual: () => void;
+  scan: () => void;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-[80] flex items-end justify-center bg-black/50 sm:items-center"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="add-product-title"
+      onMouseDown={(event) => event.target === event.currentTarget && close()}
+    >
+      <section className="theme-card w-full max-w-lg rounded-t-[30px] bg-white p-5 safe-bottom sm:rounded-[30px]">
+        <div className="flex items-center">
+          <h2 id="add-product-title" className="flex-1 text-2xl font-bold">
+            Agregar producto
+          </h2>
+          <button
+            onClick={close}
+            aria-label="Cerrar"
+            className="grid h-11 w-11 place-items-center rounded-full bg-[#edf2ee]"
+          >
+            <X />
+          </button>
+        </div>
+        <div className="mt-5 space-y-3">
+          <button
+            onClick={manual}
+            className="flex min-h-14 w-full items-center gap-3 rounded-2xl bg-[#176b46] px-4 text-left font-semibold text-white"
+          >
+            <Plus className="shrink-0" /> Agregar manualmente
+          </button>
+          <button
+            onClick={scan}
+            className="theme-card flex min-h-14 w-full items-center gap-3 rounded-2xl border border-black/[.06] bg-white px-4 text-left font-semibold text-[#176b46]"
+          >
+            <ScanBarcode className="shrink-0" /> Escanear código
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function RecipePrompt({
   close,
   submit,
@@ -304,13 +370,13 @@ function RecipePrompt({
   close: () => void;
   submit: (preference: string, craving: string) => void;
 }) {
-  const [preference, setPreference] = useState("Lo que recomiendes");
+  const [preference, setPreference] = useState("Recomiéndame algo");
   const [craving, setCraving] = useState("");
   const options = [
     "⚡ Rápido",
     "🥗 Saludable",
     "💰 Económico",
-    "🍽️ Lo que recomiendes",
+    "🍽️ Recomiéndame algo",
   ];
   return (
     <div className="fixed inset-0 z-[80] flex items-end justify-center bg-black/50 sm:items-center">

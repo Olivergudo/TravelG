@@ -9,6 +9,7 @@ import type {
   ScannedReceipt,
   ScannedReceiptItem,
 } from "@/lib/types";
+import { supabase } from "@/lib/supabase";
 type Update = (fn: (data: AppData) => AppData) => void;
 const uid = () =>
   globalThis.crypto?.randomUUID?.() ??
@@ -59,8 +60,11 @@ export function ReceiptScanner({
     try {
       const body = new FormData();
       body.append("image", await compress(file));
+      const token = (await supabase?.auth.getSession())?.data.session
+        ?.access_token;
       const response = await fetch("/api/scan-receipt", {
         method: "POST",
+        headers: token ? { authorization: `Bearer ${token}` } : undefined,
         body,
       });
       const json = await response.json();
@@ -142,7 +146,10 @@ export function ReceiptScanner({
         <h1 className="flex-1 text-xl font-bold">
           {receipt ? "Revisar ticket" : "Escanear ticket"}
         </h1>
-        <button onClick={close} className="grid h-11 w-11 place-items-center rounded-full bg-[#f1f4f2]">
+        <button
+          onClick={close}
+          className="grid h-11 w-11 place-items-center rounded-full bg-[#f1f4f2]"
+        >
           <X />
         </button>
       </header>
@@ -194,9 +201,7 @@ export function ReceiptScanner({
             )}
           </>
         )}
-        {receipt && (
-          <Review receipt={receipt} setReceipt={setReceipt} />
-        )}{" "}
+        {receipt && <Review receipt={receipt} setReceipt={setReceipt} />}{" "}
         {receipt && (
           <>
             <div

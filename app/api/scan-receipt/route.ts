@@ -3,9 +3,21 @@ import {
   analyzeReceipt,
   ReceiptServiceError,
 } from "@/lib/azure-receipt-service";
+import { authenticatedSupabase } from "@/lib/server/authenticated-supabase";
 export const runtime = "nodejs";
 export async function POST(request: Request) {
   try {
+    const auth = await authenticatedSupabase(request);
+    if (!auth)
+      return NextResponse.json(
+        { success: false, message: "Debes iniciar sesión." },
+        { status: 401 },
+      );
+    if (!auth.pro)
+      return NextResponse.json(
+        { success: false, message: "El escáner de tickets requiere Pro." },
+        { status: 403 },
+      );
     const form = await request.formData(),
       file = form.get("image");
     if (!(file instanceof File) || !file.type.startsWith("image/"))
