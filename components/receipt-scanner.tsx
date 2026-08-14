@@ -1,6 +1,6 @@
 "use client";
 import { useRef, useState } from "react";
-import { Camera, LoaderCircle, Plus, Trash2, X } from "lucide-react";
+import { Ban, Camera, Check, CircleHelp, LoaderCircle, Plus, Trash2, X } from "lucide-react";
 import { CategoryPicker } from "./expense-ui";
 import type {
   AppData,
@@ -10,6 +10,10 @@ import type {
   ScannedReceiptItem,
 } from "@/lib/types";
 import { supabase } from "@/lib/supabase";
+import { classifyTicketProduct, normalizeTicketProductName, type ClassificationResult, type TicketProductAlias } from "@/lib/food-classifier";
+import { ticketAliasRepository } from "@/lib/food-classifier/alias-repository";
+import { fridgeRepository } from "@/lib/fridge/repository";
+import { findPossibleDuplicateProduct } from "@/lib/fridge/duplicates";
 type Update = (fn: (data: AppData) => AppData) => void;
 const uid = () =>
   globalThis.crypto?.randomUUID?.() ??
@@ -27,6 +31,13 @@ const money = (n = 0) =>
     maximumFractionDigits: 0,
   }).format(n);
 const numeric = (s: string) => Number(s.replace(/\D/g, "")) || 0;
+type ReviewedItem = ScannedReceiptItem & {
+  classifier: ClassificationResult;
+  originalClassification: "food" | "non_food" | "unknown";
+  finalClassification: "food" | "non_food" | "unknown";
+  selected: boolean;
+  duplicateName?: string;
+};
 export function ReceiptScanner({
   data,
   update,
@@ -44,6 +55,9 @@ export function ReceiptScanner({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [categoryId, setCategoryId] = useState("supermarket");
+  const [reviewedItems, setReviewedItems] = useState<ReviewedItem[]>([]);
+  const [aliases, setAliases] = useState<TicketProductAlias[]>([]);
+  const [userId, setUserId] = useState<string>();
   const confirming = useRef(false);
   const choose = (selected?: File) => {
     if (!selected) return;
@@ -60,8 +74,8 @@ export function ReceiptScanner({
     try {
       const body = new FormData();
       body.append("image", await compress(file));
-      const token = (await supabase?.auth.getSession())?.data.session
-        ?.access_token;
+      const session = (await supabase?.auth.getSession())?.data.session;
+      const token = session?.access_token;
       const response = await fetch("/api/scan-receipt", {
         method: "POST",
         headers: token ? { authorization: `Bearer ${token}` } : undefined,
@@ -78,7 +92,35 @@ export function ReceiptScanner({
         throw new Error(`${base}${detail}`);
       }
       const scanned = json as ScannedReceipt;
-      setReceipt(scanned);
+      const learned = session?.user.id
+        ? await ticketAliasRepository.load(session.user.id)
+        : aliases;
+      const currentFridge = session?.user.id
+        ? await fridgeRepository.load(session.user.id)
+        : [];
+      setAliases(learned);
+      setUserId(session?.user.id);
+      const reviewed = scanned.items.map((item) => {
+          const classifier = classifyTicketProduct(
+            item.rawName || item.displayName,
+            learned,
+          );
+          const duplicate = findPossibleDuplicateProduct(
+            classifier.suggestedDisplayName || item.displayName,
+            currentFridge,
+          );
+          return {
+            ...item,
+            displayName: classifier.suggestedDisplayName || item.displayName,
+            classifier,
+            originalClassification: classifier.classification,
+            finalClassification: classifier.classification,
+            selected: classifier.classification === "food" && !duplicate,
+            duplicateName: duplicate?.product.name,
+          };
+        });
+      setReceipt({ ...scanned, items: reviewed });
+      setReviewedItems(reviewed);
     } catch (e) {
       setError(e instanceof Error ? e.message : "No pudimos leer este ticket.");
     } finally {
@@ -87,7 +129,7 @@ export function ReceiptScanner({
   };
   const sum = receipt?.items.reduce((n, i) => n + i.totalPrice, 0) || 0;
   const difference = receipt ? receipt.total - sum : 0;
-  const confirm = (finance: boolean) => {
+  const confirm = async (finance: boolean) => {
     if (!receipt || !receipt.items.length || confirming.current) return;
     confirming.current = true;
     const completedAt = receipt.date
@@ -116,6 +158,33 @@ export function ReceiptScanner({
       expenseId,
       items,
     };
+    if (userId) {
+      let currentAliases = aliases;
+      for (const item of reviewedItems) {
+        if (item.finalClassification === "unknown" || !item.rawName.trim()) continue;
+        const suggestedName = item.classifier.suggestedDisplayName || item.rawName.trim();
+        const wasCorrected =
+          item.originalClassification === "unknown" ||
+          item.finalClassification !== item.originalClassification ||
+          item.displayName.trim() !== suggestedName;
+        if (!wasCorrected) continue;
+        const alias: TicketProductAlias = {
+          rawNameNormalized: normalizeTicketProductName(item.rawName),
+          displayName: item.displayName.trim(),
+          classification: item.finalClassification,
+        };
+        currentAliases = await ticketAliasRepository.save(userId, item.rawName, alias, currentAliases);
+      }
+      setAliases(currentAliases);
+      let fridgeItems = await fridgeRepository.load(userId);
+      for (const item of reviewedItems.filter((candidate) => candidate.selected && candidate.finalClassification === "food")) {
+        fridgeItems = await fridgeRepository.add(userId, {
+          name: item.displayName.trim(),
+          quantity: item.classifier.quantity ?? item.quantity ?? 1,
+          unit: item.classifier.unit || "unidad",
+        }, fridgeItems);
+      }
+    }
     update((d) => {
       const expense = expenseId
         ? {
@@ -201,7 +270,14 @@ export function ReceiptScanner({
             )}
           </>
         )}
-        {receipt && <Review receipt={receipt} setReceipt={setReceipt} />}{" "}
+        {receipt && (
+          <Review
+            receipt={receipt}
+            setReceipt={setReceipt}
+            reviewedItems={reviewedItems}
+            setReviewedItems={setReviewedItems}
+          />
+        )}
         {receipt && (
           <>
             <div
@@ -231,7 +307,9 @@ export function ReceiptScanner({
               onClick={() => confirm(true)}
               className="min-h-14 w-full rounded-2xl bg-[#176b46] px-5 font-bold text-white"
             >
-              Confirmar ticket y guardar gasto
+              Agregar{" "}
+              {reviewedItems.filter((item) => item.selected && item.finalClassification === "food").length}{" "}
+              al refrigerador y guardar gasto
             </button>
           </>
         )}
@@ -242,15 +320,32 @@ export function ReceiptScanner({
 function Review({
   receipt,
   setReceipt,
+  reviewedItems,
+  setReviewedItems,
 }: {
   receipt: ScannedReceipt;
   setReceipt: (r: ScannedReceipt) => void;
+  reviewedItems: ReviewedItem[];
+  setReviewedItems: (items: ReviewedItem[]) => void;
 }) {
-  const change = (id: string, patch: Partial<ScannedReceiptItem>) =>
+  const change = (id: string, patch: Partial<ScannedReceiptItem>) => {
     setReceipt({
       ...receipt,
       items: receipt.items.map((i) => (i.id === id ? { ...i, ...patch } : i)),
     });
+    setReviewedItems(reviewedItems.map((item) => item.id === id ? { ...item, ...patch } : item));
+  };
+  const classify = (id: string, classification: "food" | "non_food" | "unknown") =>
+    setReviewedItems(reviewedItems.map((item) => item.id === id ? {
+      ...item, finalClassification: classification, selected: classification === "food",
+    } : item));
+  const remove = (id: string) => {
+    setReceipt({ ...receipt, items: receipt.items.filter((item) => item.id !== id) });
+    setReviewedItems(reviewedItems.filter((item) => item.id !== id));
+  };
+  const foodCount = reviewedItems.filter((item) => item.finalClassification === "food").length;
+  const nonFoodCount = reviewedItems.filter((item) => item.finalClassification === "non_food").length;
+  const unknownCount = reviewedItems.length - foodCount - nonFoodCount;
   return (
     <>
       <div className="rounded-3xl bg-white p-4">
@@ -277,26 +372,44 @@ function Review({
           />
         </div>
       </div>
-      {receipt.items.map((item) => (
+      <section className="rounded-3xl bg-white p-4">
+        <h2 className="text-lg font-bold">Productos del ticket</h2>
+        <p className="mt-1 text-sm font-semibold">Productos detectados: {reviewedItems.length}</p>
+        <p className="mt-1 text-sm text-[#68766f]">Revisa qué alimentos quieres guardar en tu refrigerador.</p>
+        <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs">
+          <div className="rounded-xl bg-emerald-50 p-2 text-emerald-800"><b className="block text-base">{foodCount}</b>Alimentos</div>
+          <div className="rounded-xl bg-slate-50 p-2 text-slate-700"><b className="block text-base">{nonFoodCount}</b>No alimentos</div>
+          <div className="rounded-xl bg-amber-50 p-2 text-amber-800"><b className="block text-base">{unknownCount}</b>Por revisar</div>
+        </div>
+      </section>
+      {receipt.items.map((item) => {
+        const reviewed = reviewedItems.find((candidate) => candidate.id === item.id);
+        if (!reviewed) return null;
+        return (
         <div key={item.id} className="space-y-3 rounded-3xl bg-white p-4">
           <div className="flex gap-2">
-            <input
-              value={item.displayName}
-              onChange={(e) => change(item.id, { displayName: e.target.value })}
-              className="min-w-0 flex-1 font-bold outline-none"
-            />
+            <div className="min-w-0 flex-1">
+              <input aria-label="Nombre del producto" value={item.displayName} onChange={(e) => change(item.id, { displayName: e.target.value })} className="w-full font-bold outline-none" />
+              {item.rawName && normalize(item.rawName) !== normalize(item.displayName) && <p className="truncate text-xs text-[#7a8780]">Ticket: {item.rawName}</p>}
+            </div>
             <button
-              onClick={() =>
-                setReceipt({
-                  ...receipt,
-                  items: receipt.items.filter((i) => i.id !== item.id),
-                })
-              }
+              aria-label={`Eliminar ${item.displayName}`}
+              onClick={() => remove(item.id)}
               className="text-red-500"
             >
               <Trash2 size={18} />
             </button>
           </div>
+          <div className="grid grid-cols-2 gap-2">
+            <button type="button" onClick={() => classify(item.id, "food")} className={`flex min-h-11 items-center justify-center gap-2 rounded-xl border px-3 text-sm font-bold ${reviewed.finalClassification === "food" && reviewed.selected ? "border-emerald-600 bg-emerald-50 text-emerald-800" : "border-[#d9e1dc] text-[#66736c]"}`}>
+              <Check size={17} /> Al refrigerador
+            </button>
+            <button type="button" onClick={() => classify(item.id, "non_food")} className={`flex min-h-11 items-center justify-center gap-2 rounded-xl border px-3 text-sm font-bold ${reviewed.finalClassification === "non_food" ? "border-slate-500 bg-slate-100 text-slate-800" : "border-[#d9e1dc] text-[#66736c]"}`}>
+              <Ban size={17} /> No alimento
+            </button>
+          </div>
+          {reviewed.finalClassification === "unknown" && <p className="flex items-center gap-2 rounded-xl bg-amber-50 p-2 text-xs text-amber-800"><CircleHelp size={16} /> No pudimos clasificarlo. Elige una opción.</p>}
+          {reviewed.duplicateName && !reviewed.selected && reviewed.finalClassification === "food" && <p className="rounded-xl bg-amber-50 p-2 text-xs text-amber-800"><b>{reviewed.duplicateName}</b> ya está en tu refrigerador. Toca “Al refrigerador” si quieres agregar otro.</p>}
           <div className="grid grid-cols-3 gap-2 text-sm">
             <label>
               Cantidad
@@ -341,24 +454,14 @@ function Review({
             </label>
           </div>
         </div>
-      ))}
+      );})}
       <button
-        onClick={() =>
-          setReceipt({
-            ...receipt,
-            items: [
-              ...receipt.items,
-              {
-                id: uid(),
-                rawName: "",
-                displayName: "Nuevo producto",
-                quantity: 1,
-                unitPrice: 0,
-                totalPrice: 0,
-              },
-            ],
-          })
-        }
+        onClick={() => {
+          const item: ScannedReceiptItem = { id: uid(), rawName: "", displayName: "Nuevo producto", quantity: 1, unitPrice: 0, totalPrice: 0 };
+          const classifier = classifyTicketProduct(item.displayName, []);
+          setReceipt({ ...receipt, items: [...receipt.items, item] });
+          setReviewedItems([...reviewedItems, { ...item, classifier, originalClassification: "unknown", finalClassification: "unknown", selected: false }]);
+        }}
         className="flex w-full justify-center gap-2 rounded-2xl bg-white py-3 font-bold text-[#176b46]"
       >
         <Plus /> Agregar producto

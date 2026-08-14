@@ -2,6 +2,7 @@ import type { AppData, Category, Purchase, PurchaseItem, ShoppingListItem } from
 import { isSupabaseConfigured, supabase } from "./supabase";
 import { getCategoryColor, knownCategoryColors } from "./category-colors";
 const KEY = "gasto-listo-data-v1";
+export const userDataCacheKey = (userId: string) => `${KEY}:${userId}`;
 export const defaultCategories = [
   { id: "supermarket", name: "Supermercado", color: "#1F8A5B", icon: "🛒" },
   { id: "transport", name: "Transporte", color: "#317A78", icon: "🚗" },
@@ -191,16 +192,16 @@ function migrate(value: unknown): AppData {
   };
 }
 export class LocalRepository implements DataRepository {
-  async load() {
+  async load(userId?: string) {
     if (typeof window === "undefined") return emptyData;
     try {
-      return migrate(JSON.parse(localStorage.getItem(KEY) || "null"));
+      return migrate(JSON.parse(localStorage.getItem(userId ? userDataCacheKey(userId) : KEY) || "null"));
     } catch {
       return emptyData;
     }
   }
-  async save(data: AppData) {
-    localStorage.setItem(KEY, JSON.stringify(data));
+  async save(data: AppData, userId?: string) {
+    localStorage.setItem(userId ? userDataCacheKey(userId) : KEY, JSON.stringify(data));
   }
 }
 
@@ -226,40 +227,19 @@ class SupabaseRepository implements DataRepository {
     if (error) throw error;
     if (data) {
       const remote = migrate(data);
-      const local = await this.local.load();
-      const hasContent = (value: AppData) =>
-        value.expenses.length > 0 ||
-        value.shoppingListItems.length > 0 ||
-        value.purchases.length > 0;
-
-      // Safari y una PWA instalada pueden tener almacenamientos separados.
-      // Si Safari creó una cuenta vacía, recupera y sube los datos de la PWA.
-      if (hasContent(local) && !hasContent(remote)) {
-        await this.write(local);
-        return local;
-      }
-      const localCompleted = new Map(
-        local.shoppingListItems.map((item) => [item.id, item.completed]),
-      );
-      return {
-        ...remote,
-        shoppingListItems: remote.shoppingListItems.map((item) => ({
-          ...item,
-          completed: item.completed ?? localCompleted.get(item.id) ?? false,
-        })),
-      };
+      await this.local.save(remote, userId);
+      return remote;
     }
 
-    // Primera conexión: sube automáticamente los datos existentes del navegador.
+    // Solo migra información remota perteneciente al mismo usuario.
     const { data: legacy } = await supabase
       .from("app_data")
       .select("data")
       .eq("user_id", userId)
       .maybeSingle();
-    const initialData = legacy?.data
-      ? migrate(legacy.data)
-      : await this.local.load();
+    const initialData = legacy?.data ? migrate(legacy.data) : emptyData;
     await this.write(initialData);
+    await this.local.save(initialData, userId);
     return initialData;
   }
 
@@ -268,9 +248,9 @@ class SupabaseRepository implements DataRepository {
     this.saveQueue = this.saveQueue
       .catch(() => undefined)
       .then(async () => {
-        await this.userId();
+        const userId = await this.userId();
         await this.write(data);
-        await this.local.save(data);
+        await this.local.save(data, userId);
       });
     return this.saveQueue;
   }

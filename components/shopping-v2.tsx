@@ -1,114 +1,80 @@
 "use client";
 
-import { ChevronDown, ChevronLeft, ChevronRight, MoreHorizontal, Pencil, ReceiptText, Search, ShoppingBasket, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { ChevronLeft, MoreHorizontal, Pencil, ReceiptText, Search, ShoppingBasket, Trash2, X } from "lucide-react";
+import { useMemo, useState } from "react";
 import { categoryEmoji, CategoryManager, formatMoney, QuickExpenseForm } from "./expense-ui";
-import type { AppData, Category, Expense, Purchase } from "@/lib/types";
+import type { AppData, Category, Expense, Purchase, PurchaseItem } from "@/lib/types";
 import { deleteExpense, saveExpense } from "@/lib/expense-sync";
-import { getCategoryBorderColor, getCategorySoftColor } from "@/lib/category-colors";
+import { getCategorySoftColor } from "@/lib/category-colors";
 
 type Update = (fn: (data: AppData) => AppData) => void;
-const monthKey = (value: string) => new Date(value).toLocaleDateString("es-CL", { month: "long", year: "numeric" });
-const shortDate = (value: string) => new Date(value).toLocaleDateString("es-CL", { day: "numeric", month: "short" });
+export type PurchaseHistoryItem = { id: string; expense?: Expense; purchase?: Purchase; title: string; description?: string; amount: number; date: string; category?: Category; products: PurchaseItem[] };
+const monthKey = (v: string) => new Date(v).toLocaleDateString("es-CL", { month: "long", year: "numeric" });
+const shortDate = (v: string) => new Date(v).toLocaleDateString("es-CL", { day: "numeric", month: "short" }).replace(".", "");
+const longDate = (v: string) => new Date(v).toLocaleDateString("es-CL", { day: "numeric", month: "long", year: "numeric" });
+export const cleanStoreName = (value?: string) => {
+  const clean = (value || "").replace(/^compra\s*[-–—:]\s*/i, "").trim();
+  return clean && !/^sin registrar$/i.test(clean) ? clean : "Compra sin registrar";
+};
+
+export function buildPurchaseHistory(data: AppData): PurchaseHistoryItem[] {
+  const linked = new Set<string>();
+  const expenses = data.expenses.map((expense) => {
+    const purchase = data.purchases.find((p) => p.id === expense.purchaseId || p.expenseId === expense.id);
+    if (purchase) linked.add(purchase.id);
+    const category = data.categories.find((c) => c.id === expense.categoryId);
+    const title = purchase ? cleanStoreName(purchase.supermarketName || expense.description) : expense.description;
+    return { id: `expense:${expense.id}`, expense, purchase, title, description: purchase && cleanStoreName(expense.description) !== title ? expense.description : undefined, amount: expense.amount, date: expense.date, category, products: purchase?.items || [] };
+  });
+  const purchases = data.purchases.filter((p) => !linked.has(p.id)).map((purchase) => ({ id: `purchase:${purchase.id}`, purchase, title: cleanStoreName(purchase.supermarketName), amount: purchase.total, date: purchase.completedAt, category: data.categories.find((c) => c.id === "supermarket"), products: purchase.items }));
+  return [...expenses, ...purchases].sort((a, b) => b.date.localeCompare(a.date));
+}
 
 export function ShoppingV2({ data, update }: { data: AppData; update: Update; showFinances: () => void }) {
-  const [selectedId, setSelectedId] = useState<string>();
-  const [editingExpense, setEditingExpense] = useState<Expense>();
+  const [selected, setSelected] = useState<PurchaseHistoryItem>();
+  const [actions, setActions] = useState<PurchaseHistoryItem>();
+  const [deleting, setDeleting] = useState<PurchaseHistoryItem>();
+  const [editing, setEditing] = useState<Expense>();
   const [managingCategories, setManagingCategories] = useState(false);
-  const selected = data.purchases.find((purchase) => purchase.id === selectedId);
-
-  useEffect(() => {
-    const missing = data.expenses.filter((expense) => expense.categoryId === "supermarket" && !expense.purchaseId);
-    if (!missing.length) return;
-    update((current) => {
-      const ids = new Map(missing.map((expense) => [expense.id, `manual-${expense.id}`]));
-      const purchases: Purchase[] = missing.map((expense) => ({
-        id: ids.get(expense.id)!, supermarketName: expense.description,
-        startedAt: expense.date, completedAt: expense.date, total: expense.amount,
-        source: "manual", expenseId: expense.id, items: [],
-      }));
-      return {
-        ...current,
-        expenses: current.expenses.map((expense) => ids.has(expense.id) ? { ...expense, purchaseId: ids.get(expense.id) } : expense),
-        purchases: [...purchases.filter((purchase) => !current.purchases.some((old) => old.id === purchase.id)), ...current.purchases],
-      };
-    });
-  }, [data.expenses, update]);
-
-  if (selected) return <PurchaseDetail purchase={selected} data={data} update={update} back={() => setSelectedId(undefined)} />;
-  return <>
-    <PurchaseHistory data={data} open={setSelectedId} edit={setEditingExpense} />
-    {editingExpense && <QuickExpenseForm categories={data.categories} expense={editingExpense} close={() => setEditingExpense(undefined)} save={(next) => { update((current) => saveExpense(current, next)); setEditingExpense(undefined); }} onManageCategories={() => setManagingCategories(true)} remove={() => { if (!window.confirm("¿Eliminar este gasto y su compra asociada?")) return; update((current) => deleteExpense(current, editingExpense.id)); setEditingExpense(undefined); }} />}
-    {managingCategories && <CategoryManager categories={data.categories} usedCategoryIds={new Set(data.expenses.map((expense) => expense.categoryId))} close={() => setManagingCategories(false)} onChange={(categories) => update((current) => ({ ...current, categories }))} />}
-  </>;
-}
-
-function PurchaseHistory({ data, open, edit }: { data: AppData; open: (id: string) => void; edit: (expense: Expense) => void }) {
-  const [query, setQuery] = useState("");
-  const [categoryId, setCategoryId] = useState("all");
-  const [showMore, setShowMore] = useState(false);
-  const purchaseCategoryIds = [...new Set(data.purchases.map((purchase) =>
-    data.expenses.find((expense) => expense.id === purchase.expenseId)?.categoryId,
-  ).filter((id): id is string => Boolean(id)))];
-  const purchaseCategories = purchaseCategoryIds.map((id) => data.categories.find((category) => category.id === id)).filter((category): category is Category => Boolean(category));
-  const primaryCategories = purchaseCategories.slice(0, 3);
-  const remainingCategories = purchaseCategories.slice(3);
-  const filteredPurchases = data.purchases.filter((purchase) => {
-    const expense = data.expenses.find((item) => item.id === purchase.expenseId);
-    const search = query.trim().toLocaleLowerCase("es-CL");
-    const matchesSearch = !search || [purchase.supermarketName, expense?.description || "", purchase.completedAt, new Date(purchase.completedAt).toLocaleDateString("es-CL")].some((value) => value.toLocaleLowerCase("es-CL").includes(search));
-    return matchesSearch && (categoryId === "all" || expense?.categoryId === categoryId);
-  });
-  const groups = useMemo(() => {
-    const map = new Map<string, Purchase[]>();
-    [...filteredPurchases].sort((a, b) => b.completedAt.localeCompare(a.completedAt)).forEach((purchase) => {
-      const key = monthKey(purchase.completedAt);
-      map.set(key, [...(map.get(key) || []), purchase]);
-    });
-    return [...map.entries()];
-  }, [filteredPurchases]);
-  const recentExpenses = [...data.expenses].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 8);
-  return <>
-    <header className="px-5 pb-5 pt-[max(2rem,env(safe-area-inset-top))]"><p className="text-[13px] font-bold uppercase tracking-[.18em] text-[#6f8278]">Historial</p><h1 className="mt-1 text-[30px] font-bold leading-tight">Compras</h1></header>
-    <div className="space-y-7 px-4 pb-28">
-      <section className="space-y-3">
-        <div className="relative"><Search className="absolute left-4 top-1/2 -translate-y-1/2 text-[#718078]" size={19}/><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar compras…" className="theme-card min-h-14 w-full rounded-2xl border border-black/[.04] bg-white py-3 pl-12 pr-4 outline-none"/></div>
-        {purchaseCategories.length > 0 && <div className="grid grid-cols-4 gap-2">{primaryCategories.map((category) => <button key={category.id} onClick={() => setCategoryId((current) => current === category.id ? "all" : category.id)} aria-label={`Filtrar por ${category.name || categoryEmoji(category)}`} style={categoryId === category.id ? { backgroundColor: getCategorySoftColor(category), borderColor: getCategoryBorderColor(category) } : undefined} className={`min-h-12 rounded-2xl border text-xl ${categoryId === category.id ? "" : "theme-card border-black/[.04] bg-white"}`}>{categoryEmoji(category)}</button>)}{remainingCategories.length > 0 && <button onClick={() => setShowMore((current) => !current)} className="theme-card flex min-h-12 items-center justify-center rounded-2xl border border-black/[.04] bg-white text-xs font-bold">Otros <ChevronDown size={15} className={showMore ? "rotate-180" : ""}/></button>}{showMore && remainingCategories.map((category) => <button key={category.id} onClick={() => setCategoryId((current) => current === category.id ? "all" : category.id)} style={categoryId === category.id ? { backgroundColor: getCategorySoftColor(category), borderColor: getCategoryBorderColor(category) } : undefined} className={`min-h-12 rounded-2xl border text-xl ${categoryId === category.id ? "" : "theme-card border-black/[.04] bg-white"}`}>{categoryEmoji(category)}</button>)}</div>}
-      </section>
-      <section>
-        <h2 className="mb-3 text-xl font-bold tracking-[-.01em]">Movimientos recientes</h2>
-        <div className="theme-card overflow-hidden rounded-[26px] border border-black/[.04] bg-white">
-          {recentExpenses.map((expense) => {
-            const category = data.categories.find((item) => item.id === expense.categoryId);
-            return <button key={expense.id} onClick={() => edit(expense)} className="flex min-h-[76px] w-full items-center gap-3 border-b border-black/5 px-4 py-3.5 text-left last:border-0"><span style={{ backgroundColor: getCategorySoftColor(category) }} className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl text-2xl">{categoryEmoji(category)}</span><span className="min-w-0 flex-1"><b className="block truncate text-[15px]">{expense.description}</b><small className="mt-1 block truncate text-[13px] text-[#718078]">{category?.name ? `${category.name} · ` : ""}{new Date(expense.date).toLocaleDateString("es-CL")}</small></span><b className="shrink-0 whitespace-nowrap text-sm">{formatMoney(expense.amount)}</b><span className="grid h-11 w-8 shrink-0 place-items-center" aria-hidden="true"><MoreHorizontal size={20}/></span></button>;
-          })}
-          {!recentExpenses.length && <p className="p-8 text-center text-sm text-[#718078]">No hay movimientos para mostrar.</p>}
-        </div>
-      </section>
-      {!groups.length && <section className="theme-card rounded-[28px] bg-white p-8 text-center"><ShoppingBasket className="mx-auto mb-3 text-[#91a098]" size={32}/><h2 className="font-bold">Aún no hay compras</h2><p className="mt-1 text-sm text-[#718078]">Registra un gasto de supermercado desde Finanzas.</p></section>}
-      {groups.map(([month, purchases]) => <section key={month}>
-        <h2 className="mb-3 px-1 text-sm font-bold uppercase tracking-[.14em] text-[#718078]">{month}</h2>
-        <div className="theme-card overflow-hidden rounded-[26px] border border-black/[.04] bg-white">{purchases.map((purchase) => <button key={purchase.id} onClick={() => open(purchase.id)} className="flex min-h-[82px] w-full items-center gap-3 border-b border-black/5 px-4 py-3 text-left last:border-0"><span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-[#e5f3ea] text-xl">🛒</span><span className="min-w-0 flex-1"><b className="block truncate">{purchase.supermarketName}</b><small className="text-[#718078]">{shortDate(purchase.completedAt)} · {purchase.items.length ? `${purchase.items.length} productos` : "Registro manual"}</small></span><span className="text-right"><b className="block">{formatMoney(purchase.total)}</b><ChevronRight className="ml-auto mt-1 text-[#91a098]" size={17}/></span></button>)}</div>
-      </section>)}
-    </div>
-  </>;
-}
-
-function PurchaseDetail({ purchase, data, update, back }: { purchase: Purchase; data: AppData; update: Update; back: () => void }) {
-  const [editing, setEditing] = useState(false);
-  const expense = data.expenses.find((item) => item.id === purchase.expenseId);
-  const remove = () => {
-    if (!window.confirm("¿Eliminar este gasto y su compra asociada?")) return;
-    if (expense) update((current) => deleteExpense(current, expense.id));
-    else update((current) => ({ ...current, purchases: current.purchases.filter((item) => item.id !== purchase.id) }));
-    back();
+  const remove = (item: PurchaseHistoryItem) => {
+    if (item.expense) update((data) => deleteExpense(data, item.expense!.id));
+    else if (item.purchase) update((data) => ({ ...data, purchases: data.purchases.filter((p) => p.id !== item.purchase!.id) }));
+    setDeleting(undefined); setSelected(undefined);
   };
   return <>
-    <header className="sticky top-0 z-20 flex min-h-[68px] items-center gap-1 border-b border-black/[.05] bg-white/95 px-3 pb-2 pt-[max(.5rem,env(safe-area-inset-top))] backdrop-blur-xl"><button onClick={back} aria-label="Volver" className="grid h-11 w-11 place-items-center rounded-2xl text-[#176b46]"><ChevronLeft size={22}/></button><h1 className="min-w-0 flex-1 truncate text-center text-lg font-bold">Detalle de compra</h1>{expense && <button onClick={() => setEditing(true)} aria-label="Editar gasto" title="Editar gasto" className="grid h-11 w-11 place-items-center rounded-2xl text-[#176b46]"><Pencil size={19}/></button>}<button onClick={remove} aria-label="Eliminar gasto" title="Eliminar gasto" className="grid h-11 w-11 place-items-center rounded-2xl text-red-600"><Trash2 size={19}/></button></header>
-    <div className="px-4 py-5 pb-28"><section className="theme-card rounded-[28px] bg-white p-5"><div className="mb-6 text-center"><ReceiptText className="mx-auto mb-2 text-[#176b46]"/><h2 className="text-xl font-bold uppercase">{purchase.supermarketName}</h2><p className="text-sm text-[#718078]">{new Date(purchase.completedAt).toLocaleDateString("es-CL", { dateStyle: "long" })}</p></div>
-      {purchase.items.length ? purchase.items.map((item) => <div key={item.id} className="flex border-b border-dashed border-black/10 py-3"><span className="flex-1"><b className="block">{item.productName}</b><small className="text-[#718078]">{item.quantity} × {formatMoney(item.unitPrice)}</small></span><b>{formatMoney(item.totalPrice)}</b></div>) : <div className="rounded-2xl bg-[#f3f6f3] p-4"><b className="block">Registro manual</b>{expense?.description && <p className="mt-1 text-sm text-[#718078]">{expense.description}</p>}</div>}
-      <div className="mt-6 flex items-end border-t border-black/10 pt-4"><b className="flex-1 text-lg">TOTAL</b><b className="text-2xl">{formatMoney(purchase.total)}</b></div>
-    </section></div>
-    {editing && expense && <QuickExpenseForm categories={data.categories} expense={expense} close={() => setEditing(false)} save={(next: Expense) => { update((current) => saveExpense(current, next)); setEditing(false); }} remove={remove} />}
+    <PurchaseHistory data={data} open={setSelected} actions={setActions}/>
+    {selected && <HistoryDetail item={selected} close={() => setSelected(undefined)}/>}
+    {actions && <HistoryActions item={actions} close={() => setActions(undefined)} edit={() => { if (actions.expense) setEditing(actions.expense); setActions(undefined); }} remove={() => { setDeleting(actions); setActions(undefined); }}/>}
+    {deleting && <DeleteDialog item={deleting} cancel={() => setDeleting(undefined)} confirm={() => remove(deleting)}/>}
+    {editing && <QuickExpenseForm categories={data.categories} expense={editing} close={() => setEditing(undefined)} save={(next) => { update((current) => saveExpense(current, next)); setEditing(undefined); }} onManageCategories={() => setManagingCategories(true)}/>}
+    {managingCategories && <CategoryManager categories={data.categories} usedCategoryIds={new Set(data.expenses.map((e) => e.categoryId))} close={() => setManagingCategories(false)} onChange={(categories) => update((current) => ({ ...current, categories }))}/>}
   </>;
 }
+
+function PurchaseHistory({ data, open, actions }: { data: AppData; open: (item: PurchaseHistoryItem) => void; actions: (item: PurchaseHistoryItem) => void }) {
+  const [query, setQuery] = useState(""); const [categoryId, setCategoryId] = useState("all"); const [filterOpen, setFilterOpen] = useState(false);
+  const history = useMemo(() => buildPurchaseHistory(data), [data]);
+  const categories = useMemo(() => data.categories.filter((c) => history.some((i) => i.category?.id === c.id)), [data.categories, history]);
+  const visible = useMemo(() => { const search = query.trim().toLocaleLowerCase("es-CL"); return history.filter((item) => (categoryId === "all" || item.category?.id === categoryId) && (!search || [item.title, item.description || "", item.category?.name || "", item.purchase?.supermarketName || "", ...item.products.flatMap((p) => [p.productName, p.rawProductName || ""])].some((v) => v.toLocaleLowerCase("es-CL").includes(search)))); }, [categoryId, history, query]);
+  const groups = useMemo(() => { const map = new Map<string, PurchaseHistoryItem[]>(); visible.forEach((item) => map.set(monthKey(item.date), [...(map.get(monthKey(item.date)) || []), item])); return [...map.entries()]; }, [visible]);
+  return <><header className="px-5 pb-5 pt-[max(2rem,env(safe-area-inset-top))]"><p className="text-[13px] font-bold uppercase tracking-[.18em] text-[#6f8278]">Historial</p><h1 className="mt-1 text-[30px] font-bold">Compras</h1></header>
+    <main className="space-y-7 px-4 pb-28"><div className="flex min-w-0 gap-2"><label className="theme-card flex min-h-14 min-w-0 flex-1 items-center gap-3 rounded-2xl border border-black/[.04] bg-white px-4"><Search className="shrink-0 text-[#718078]" size={19}/><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar compras..." className="min-w-0 flex-1 bg-transparent outline-none"/></label><button onClick={() => setFilterOpen(true)} aria-label="Filtrar historial" className={`grid h-14 w-14 shrink-0 place-items-center rounded-2xl border text-xl font-bold ${categoryId === "all" ? "theme-card border-black/[.04] bg-white" : "border-[#4fc187] bg-[#173c2b] text-[#62d196]"}`}>•••</button></div>
+      {!history.length && <Empty title="Aún no tienes compras registradas."/>}{history.length > 0 && !groups.length && <Empty title="No encontramos movimientos con esos filtros."/>}
+      {groups.map(([month, items]) => <section key={month}><h2 className="mb-3 px-1 text-sm font-bold uppercase tracking-[.14em] text-[#718078]">{month}</h2><div className="theme-card overflow-hidden rounded-[26px] border border-black/[.04] bg-white">{items.map((item) => <HistoryRow key={item.id} item={item} open={() => open(item)} actions={() => actions(item)}/>)}</div></section>)}
+    </main>{filterOpen && <HistoryFilter categories={categories} selected={categoryId} close={() => setFilterOpen(false)} select={(id) => { setCategoryId(id); setFilterOpen(false); }}/>}</>;
+}
+
+function HistoryRow({ item, open, actions }: { item: PurchaseHistoryItem; open: () => void; actions: () => void }) {
+  const products = item.products.length ? ` · ${item.products.length} ${item.products.length === 1 ? "producto" : "productos"}` : "";
+  return <div role="button" tabIndex={0} onClick={open} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") open(); }} className="flex min-h-[76px] w-full cursor-pointer items-center gap-3 border-b border-black/5 px-4 py-3 text-left last:border-0"><span style={{ backgroundColor: getCategorySoftColor(item.category) }} className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl text-xl">{categoryEmoji(item.category)}</span><span className="min-w-0 flex-1"><b className="line-clamp-2 text-[15px] leading-tight">{item.title}</b><small className="mt-1 block truncate text-[13px] text-[#718078]">{item.category?.name || "Otros"} · {shortDate(item.date)}{products}</small></span><b className="shrink-0 whitespace-nowrap text-sm">{formatMoney(item.amount)}</b><button onClick={(e) => { e.stopPropagation(); actions(); }} aria-label={`Acciones para ${item.title}`} className="grid h-11 w-9 shrink-0 place-items-center rounded-xl"><MoreHorizontal size={20}/></button></div>;
+}
+function Empty({ title }: { title: string }) { return <section className="theme-card rounded-[28px] bg-white p-8 text-center"><ShoppingBasket className="mx-auto mb-3 text-[#91a098]" size={32}/><p className="font-semibold">{title}</p></section>; }
+
+function HistoryDetail({ item, close }: { item: PurchaseHistoryItem; close: () => void }) {
+  return <div className="fixed inset-0 z-[70] flex items-end justify-center bg-black/50 sm:items-center"><section className="theme-card max-h-[calc(100dvh-env(safe-area-inset-top))] w-full max-w-lg overflow-y-auto rounded-t-[30px] bg-white p-5 safe-bottom sm:rounded-[30px]"><div className="flex items-center gap-2"><button onClick={close} aria-label="Volver" className="grid h-11 w-11 place-items-center rounded-full bg-[#edf2ee]"><ChevronLeft size={21}/></button><p className="flex-1 text-center text-xs font-bold uppercase tracking-[.16em] text-[#718078]">{item.purchase ? "Detalle de compra" : "Detalle"}</p><button onClick={close} aria-label="Cerrar" className="grid h-11 w-11 place-items-center rounded-full bg-[#edf2ee]"><X size={20}/></button></div><div className="mt-5 text-center"><span style={{ backgroundColor: getCategorySoftColor(item.category) }} className="mx-auto grid h-14 w-14 place-items-center rounded-2xl text-2xl">{categoryEmoji(item.category)}</span><h2 className="mx-auto mt-3 max-w-sm text-2xl font-bold leading-tight">{item.title}</h2></div><dl className="mt-6 grid grid-cols-2 gap-3"><Info label="Monto" value={formatMoney(item.amount)}/><Info label="Categoría" value={item.category?.name || "Otros"}/><div className="col-span-2"><Info label="Fecha" value={longDate(item.date)}/></div></dl>{item.description && <section className="mt-5"><h3 className="text-xs font-bold uppercase tracking-[.14em] text-[#718078]">Descripción</h3><p className="mt-2 text-sm">{item.description}</p></section>}{item.products.length > 0 && <section className="mt-6"><div className="flex items-center gap-2"><ReceiptText className="text-[#176b46]" size={19}/><h3 className="text-xs font-bold uppercase tracking-[.14em] text-[#718078]">Productos · {item.products.length}</h3></div><div className="mt-2 overflow-hidden rounded-2xl border border-black/[.07]">{item.products.map((p) => <div key={p.id} className="flex gap-3 border-b border-black/[.06] px-4 py-3 text-sm last:border-0"><span className="min-w-0 flex-1 font-semibold">{p.productName}</span><span className="shrink-0 text-[#718078]">{p.quantity} × {formatMoney(p.unitPrice)}</span></div>)}</div></section>}</section></div>;
+}
+function Info({ label, value }: { label: string; value: string }) { return <div className="h-full rounded-2xl bg-[#f3f6f3] p-4"><dt className="text-xs font-bold uppercase tracking-wide text-[#718078]">{label}</dt><dd className="mt-1 font-bold">{value}</dd></div>; }
+
+function HistoryActions({ item, close, edit, remove }: { item: PurchaseHistoryItem; close: () => void; edit: () => void; remove: () => void }) { return <div className="fixed inset-0 z-[80] flex items-end justify-center bg-black/50 sm:items-center" onClick={close}><section className="theme-card w-full max-w-lg rounded-t-[30px] bg-white p-5 safe-bottom sm:rounded-[30px]" onClick={(e) => e.stopPropagation()}><div className="flex items-center gap-3"><h2 className="min-w-0 flex-1 truncate text-xl font-bold">{item.title}</h2><button onClick={close} aria-label="Cerrar" className="grid h-11 w-11 place-items-center rounded-full bg-[#edf2ee]"><X/></button></div><div className="mt-4 space-y-2">{item.expense && <button onClick={edit} className="flex min-h-12 w-full items-center gap-3 rounded-2xl bg-[#edf2ee] px-4 font-semibold"><Pencil size={19}/> Editar</button>}<button onClick={remove} className="flex min-h-12 w-full items-center gap-3 rounded-2xl bg-red-50 px-4 font-semibold text-red-700"><Trash2 size={19}/> Eliminar</button></div></section></div>; }
+function DeleteDialog({ item, cancel, confirm }: { item: PurchaseHistoryItem; cancel: () => void; confirm: () => void }) { return <div className="fixed inset-0 z-[90] grid place-items-center bg-black/60 p-5"><section role="alertdialog" aria-modal="true" aria-labelledby="delete-history-title" className="theme-card w-full max-w-sm rounded-[26px] bg-white p-5 text-center"><h2 id="delete-history-title" className="text-xl font-bold">¿Eliminar movimiento?</h2><p className="mt-2 text-sm text-[#718078]">“{item.title}” se eliminará definitivamente. Esta acción no se puede deshacer.</p><div className="mt-5 grid grid-cols-2 gap-2"><button onClick={cancel} className="min-h-12 rounded-2xl border border-black/10 font-semibold">Cancelar</button><button onClick={confirm} className="min-h-12 rounded-2xl bg-red-600 font-semibold text-white">Eliminar</button></div></section></div>; }
+function HistoryFilter({ categories, selected, close, select }: { categories: Category[]; selected: string; close: () => void; select: (id: string) => void }) { return <div className="fixed inset-0 z-[70] flex items-end justify-center bg-black/50 sm:items-center" onClick={close}><section className="theme-card w-full max-w-lg rounded-t-[30px] bg-white p-5 safe-bottom sm:rounded-[30px]" onClick={(e) => e.stopPropagation()}><div className="flex items-center"><h2 className="flex-1 text-xl font-bold">Filtrar historial</h2><button onClick={close} aria-label="Cerrar" className="grid h-11 w-11 place-items-center rounded-full bg-[#edf2ee]"><X/></button></div><div className="mt-4 grid grid-cols-2 gap-2"><button onClick={() => select("all")} className={`min-h-12 rounded-2xl border px-3 font-semibold ${selected === "all" ? "border-[#176b46] bg-[#e6f3ec] text-[#176b46]" : "border-black/10"}`}>Todos</button>{categories.map((c) => <button key={c.id} onClick={() => select(c.id)} className={`min-h-12 min-w-0 truncate rounded-2xl border px-3 font-semibold ${selected === c.id ? "border-[#176b46] bg-[#e6f3ec] text-[#176b46]" : "border-black/10"}`}>{categoryEmoji(c)} {c.name || "Otros"}</button>)}</div></section></div>; }

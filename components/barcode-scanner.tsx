@@ -14,9 +14,11 @@ type NativeDetectorConstructor = new (options?: {
 export function BarcodeScanner({
   close,
   scanned,
+  continuous = false,
 }: {
   close: () => void;
   scanned: (code: string) => void;
+  continuous?: boolean;
 }) {
   const video = useRef<HTMLVideoElement>(null);
   const [manual, setManual] = useState("");
@@ -101,10 +103,14 @@ export function BarcodeScanner({
           </div>
           <button
             onClick={close}
-            aria-label="Cerrar"
-            className="grid h-11 w-11 place-items-center rounded-full bg-[#edf2ee]"
+            aria-label={continuous ? "Terminar de escanear" : "Cerrar"}
+            className={
+              continuous
+                ? "min-h-11 px-3 font-bold text-[#176b46]"
+                : "grid h-11 w-11 place-items-center rounded-full bg-[#edf2ee]"
+            }
           >
-            <X />
+            {continuous ? "Listo" : <X />}
           </button>
         </div>
         <div className="relative mt-4 aspect-[4/3] overflow-hidden rounded-2xl bg-black">

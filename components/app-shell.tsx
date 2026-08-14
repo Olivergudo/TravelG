@@ -12,7 +12,6 @@ import { ShoppingV2 } from "./shopping-v2";
 import { ShoppingList } from "./shopping-list";
 import { ReceiptScanner } from "./receipt-scanner";
 import {
-  categoryEmoji,
   CategoryManager,
   formatMoney,
   QuickExpenseForm,
@@ -20,8 +19,7 @@ import {
 import { useAppData } from "@/hooks/use-app-data";
 import type { AppData } from "@/lib/types";
 import { saveExpense } from "@/lib/expense-sync";
-import { FinanceCharts, FinanceHeroDonut } from "./finance-charts";
-import { getCategoryColor, getCategorySoftColor } from "@/lib/category-colors";
+import { FinanceCharts } from "./finance-charts";
 import { AccountAccess } from "./account-access";
 import {
   AnonymousLinkScreen,
@@ -33,9 +31,9 @@ import { FridgeScreen } from "./fridge-screen";
 import { useUserPlan } from "@/hooks/use-user-plan";
 import { canUseFeature } from "@/lib/features/plans";
 export function AppShell() {
-  const { data, update, ready, reload } = useAppData();
   const [authReady, setAuthReady] = useState(!isSupabaseConfigured);
   const [authUser, setAuthUser] = useState<User | null>(null);
+  const { data, update, ready, reload } = useAppData(authUser?.id);
   const [recoveringPassword, setRecoveringPassword] = useState(false);
   const [tab, setTab] = useState<"finances" | "list" | "fridge" | "shopping">(
     "finances",
@@ -56,6 +54,13 @@ export function AppShell() {
   const canScanReceipts = Boolean(
     entitlements && canUseFeature(entitlements, "receiptScanner"),
   );
+  const canScanProducts = Boolean(
+    entitlements && canUseFeature(entitlements, "barcodeScanner"),
+  );
+  const canCook = Boolean(
+    entitlements && canUseFeature(entitlements, "aiRecipes"),
+  );
+  const showGlobalExpenseButton = tab === "finances";
   useEffect(() => {
     if (!supabase) return;
     const recoveryTimer =
@@ -78,9 +83,6 @@ export function AppShell() {
       listener.subscription.unsubscribe();
     };
   }, []);
-  useEffect(() => {
-    if (authUser) reload().catch(() => undefined);
-  }, [authUser, reload]);
   useEffect(() => {
     const colorScheme = window.matchMedia("(prefers-color-scheme: dark)");
     const syncWithDevice = (event?: MediaQueryListEvent) => {
@@ -116,14 +118,19 @@ export function AppShell() {
       {tab === "finances" ? (
         <Finances
           data={data}
-          dark={theme === "dark"}
           reload={reload}
           admin={role === "admin"}
         />
       ) : tab === "list" ? (
         <ShoppingList data={data} update={update} />
       ) : tab === "fridge" && authUser ? (
-        <FridgeScreen userId={authUser.id} data={data} update={update} />
+        <FridgeScreen
+          userId={authUser.id}
+          data={data}
+          update={update}
+          canScanProducts={canScanProducts}
+          canCook={canCook}
+        />
       ) : (
         <ShoppingV2
           data={data}
@@ -161,14 +168,16 @@ export function AppShell() {
           icon={<ReceiptText />}
           label="Compras"
         />
-        <button
-          type="button"
-          onClick={() => setAddingExpense(true)}
-          aria-label="Nuevo gasto"
-          className="tap absolute left-1/2 -top-7 grid h-14 w-14 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-[20px] border-4 border-[#f3f6f3] bg-[#176b46] text-white shadow-[0_8px_22px_rgba(23,107,70,.32)] transition-transform duration-150"
-        >
-          <Plus size={30} strokeWidth={2.5} />
-        </button>
+        {showGlobalExpenseButton && (
+          <button
+            type="button"
+            onClick={() => setAddingExpense(true)}
+            aria-label="Nuevo gasto"
+            className="tap absolute left-1/2 -top-7 grid h-14 w-14 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-[20px] border-4 border-[#f3f6f3] bg-[#176b46] text-white shadow-[0_8px_22px_rgba(23,107,70,.32)] transition-transform duration-150"
+          >
+            <Plus size={30} strokeWidth={2.5} />
+          </button>
+        )}
       </nav>
       {addingExpense && (
         <QuickExpenseForm
@@ -248,12 +257,10 @@ function Nav({
 
 function Finances({
   data,
-  dark,
   reload,
   admin,
 }: {
   data: AppData;
-  dark: boolean;
   reload: () => Promise<void>;
   admin: boolean;
 }) {
@@ -269,16 +276,6 @@ function Finances({
   const week = month
     .filter((e) => Date.now() - new Date(e.date).getTime() < 604800000)
     .reduce((n, e) => n + e.amount, 0);
-  const totals = data.categories
-    .map((category) => ({
-      category,
-      total: month
-        .filter((e) => e.categoryId === category.id)
-        .reduce((sum, e) => sum + e.amount, 0),
-    }))
-    .filter((row) => row.total > 0)
-    .sort((a, b) => b.total - a.total);
-  const largestCategoryTotal = totals[0]?.total || 1;
   return (
     <>
       <header className="flex items-center px-5 pb-5 pt-[max(2rem,env(safe-area-inset-top))]">
@@ -297,22 +294,19 @@ function Finances({
           }}
         />
       </header>
-      <section className="mx-4 min-w-0 rounded-[30px] bg-[#173d2d] p-6 text-white shadow-[0_10px_30px_rgba(23,61,45,.12)]">
-        <FinanceHeroDonut
-          expenses={month}
-          categories={data.categories}
-          total={total}
-        />
-        <div className="mt-6 grid grid-cols-2 gap-3 border-t border-white/10 pt-4">
-          <span className="text-[13px] text-white/65">
+      <section className="mx-4 min-w-0 rounded-[24px] border border-[#4fc187]/20 bg-[#101a14] px-5 py-4 text-white shadow-[0_8px_22px_rgba(0,0,0,.08)]">
+        <p className="text-xs font-medium text-white/60">Gastado este mes</p>
+        <p className="mt-1.5 truncate text-[clamp(1.75rem,8vw,2.25rem)] font-bold leading-none tracking-[-.035em]">{formatMoney(total)}</p>
+        <div className="mt-3 grid grid-cols-2 gap-3 border-t border-white/10 pt-3">
+          <span className="text-xs text-white/60">
             Esta semana{" "}
-            <b className="mt-1 block text-base text-white">
+            <b className="mt-0.5 block text-sm text-white">
               {formatMoney(week)}
             </b>
           </span>
-          <span className="text-[13px] text-white/65">
+          <span className="text-xs text-white/60">
             Movimientos{" "}
-            <b className="mt-1 block text-base text-white">
+            <b className="mt-0.5 block text-sm text-white">
               {month.length} gastos
             </b>
           </span>
@@ -323,52 +317,7 @@ function Finances({
           expenses={month}
           categories={data.categories}
           total={total}
-          dark={dark}
-          showDistribution={false}
         />
-        <section>
-          <h2 className="mb-3 text-xl font-bold tracking-[-.01em]">
-            Por categoría
-          </h2>
-          <div className="overflow-hidden rounded-[26px] border border-black/[.04] bg-white">
-            {totals.map(({ category, total }) => (
-              <button
-                key={category.id}
-                type="button"
-                className="flex min-h-[68px] w-full items-center border-b border-black/5 px-4 py-3 text-left last:border-0"
-              >
-                <span
-                  style={{ backgroundColor: getCategorySoftColor(category) }}
-                  className="mr-3 grid h-11 w-11 shrink-0 place-items-center rounded-2xl text-2xl"
-                >
-                  {categoryEmoji(category)}
-                </span>
-                <span className="min-w-0 flex-1 pr-3">
-                  {category.name && (
-                    <b className="block truncate">{category.name}</b>
-                  )}
-                  <span className="mt-1.5 block h-1.5 overflow-hidden rounded-full bg-[#dfe8e2]">
-                    <span
-                      className="block h-full rounded-full"
-                      style={{
-                        width: `${Math.max(5, (total / largestCategoryTotal) * 100)}%`,
-                        backgroundColor: getCategoryColor(category),
-                      }}
-                    />
-                  </span>
-                </span>
-                <b className="shrink-0 whitespace-nowrap text-sm">
-                  {formatMoney(total)}
-                </b>
-              </button>
-            ))}
-            {!totals.length && (
-              <p className="p-6 text-center text-sm text-[#718078]">
-                Las categorías aparecerán cuando registres gastos.
-              </p>
-            )}
-          </div>
-        </section>
       </div>
     </>
   );

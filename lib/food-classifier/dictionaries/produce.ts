@@ -1,0 +1,38 @@
+import { foods } from "./helpers";
+
+export const produceDictionary = [
+  ...foods("vegetable", [
+    ["Papa", "papa|papas|patata|patatas"], ["Cebolla", "cebolla|cebollas|cebolla blanca|cebolla morada"],
+    ["Tomate", "tomate|tomates|jitomate|jitomates"], ["Zanahoria", "zanahoria|zanahorias"],
+    ["Lechuga", "lechuga|lechugas|lechuga romana|lechuga escarola"], ["Espinaca", "espinaca|espinacas"],
+    ["Acelga", "acelga|acelgas"], ["Brócoli", "brocoli|brocolis|brócoli|brócolis"],
+    ["Coliflor", "coliflor|coliflores"], ["Pepino", "pepino|pepinos"],
+    ["Pimentón", "pimenton|pimentón|pimiento|pimientos|pimiento morron|pimiento morrón"],
+    ["Ají", "aji|ají|ajies|ajíes|chile|chiles|jalapeno|jalapeño|jalapenos|jalapeños"],
+    ["Zapallo", "zapallo|zapallos|calabaza|calabazas"], ["Zapallo italiano", "zapallo italiano|calabacin|calabacín|zucchini"],
+    ["Berenjena", "berenjena|berenjenas"], ["Apio", "apio|apios"], ["Ajo", "ajo|ajos"],
+    ["Puerro", "puerro|puerros|poro|poros"], ["Champiñón", "champinon|champiñon|champiñón|champinones|champiñones|hongo|hongos|seta|setas"],
+    ["Choclo", "choclo|choclos|elote|elotes|maiz|maíz"], ["Porotos verdes", "poroto verde|porotos verdes|ejote|ejotes|judia verde|judía verde"],
+    ["Repollo", "repollo|repollos|col blanca|col morada|col lombarda"], ["Betarraga", "betarraga|betarragas|remolacha|remolachas"],
+    ["Rábano", "rabano|rábano|rabanos|rábanos"], ["Alcachofa", "alcachofa|alcachofas"],
+    ["Espárrago", "esparrago|espárrago|esparragos|espárragos"], ["Camote", "camote|camotes|batata|batatas|boniato|boniatos"],
+    ["Palta", "palta|paltas|aguacate|aguacates"], ["Cilantro", "cilantro"], ["Perejil", "perejil"],
+    ["Arveja", "arveja|arvejas|chicharo|chícharo|chicharos|chícharos|guisante|guisantes"],
+    ["Nabo", "nabo|nabos"], ["Yuca", "yuca|yucas|mandioca"], ["Jengibre", "jengibre"],
+    ["Rúcula", "rucula|rúcula"], ["Berro", "berro|berros"], ["Endivia", "endivia|endivias"],
+  ]),
+  ...foods("fruit", [
+    ["Manzana", "manzana|manzanas|manzana roja|manzana verde"], ["Pera", "pera|peras"],
+    ["Plátano", "platano|plátano|platanos|plátanos|banana|bananas"], ["Naranja", "naranja|naranjas"],
+    ["Mandarina", "mandarina|mandarinas|clementina|clementinas"], ["Limón", "limon|limón|limones|lima|limas"],
+    ["Pomelo", "pomelo|pomelos|toronja|toronjas"], ["Uva", "uva|uvas|uva verde|uva roja"],
+    ["Frutilla", "frutilla|frutillas|fresa|fresas"], ["Arándano", "arandano|arándano|arandanos|arándanos|blueberry|blueberries"],
+    ["Frambuesa", "frambuesa|frambuesas"], ["Mora", "mora|moras|zarzamora|zarzamoras"],
+    ["Sandía", "sandia|sandía|sandias|sandías"], ["Melón", "melon|melón|melones"], ["Piña", "pina|piña|pinas|piñas|anana|ananá"],
+    ["Mango", "mango|mangos"], ["Papaya", "papaya|papayas"], ["Durazno", "durazno|duraznos|melocoton|melocotón|melocotones"],
+    ["Nectarina", "nectarina|nectarinas"], ["Ciruela", "ciruela|ciruelas"], ["Kiwi", "kiwi|kiwis"],
+    ["Coco", "coco|cocos"], ["Granada", "granada|granadas"], ["Maracuyá", "maracuya|maracuyá"],
+    ["Chirimoya", "chirimoya|chirimoyas"], ["Higo", "higo|higos"], ["Guayaba", "guayaba|guayabas"],
+    ["Membrillo", "membrillo|membrillos"], ["Tuna", "tuna|tunas"], ["Dátil", "datil|dátil|datiles|dátiles"],
+  ]),
+];

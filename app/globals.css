@@ -7,7 +7,9 @@
   --brand: #176b46;
 }
 
-* { box-sizing: border-box; }
+* {
+  box-sizing: border-box;
+}
 html {
   width: 100%;
   max-width: 100%;
@@ -22,27 +24,85 @@ body {
   margin: 0;
   background: #fff;
   color: var(--ink);
-  font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family:
+    Inter,
+    ui-sans-serif,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
   line-height: 1.45;
   -webkit-font-smoothing: antialiased;
   overflow-x: clip;
 }
 html[data-app-theme="dark"],
-html[data-app-theme="dark"] body { background: #000; }
-.safe-bottom { padding-bottom: calc(8.25rem + env(safe-area-inset-bottom)); overflow-x: clip; }
-.sheet { animation: up .2s ease-out; }
-@keyframes up { from { transform: translateY(20px); opacity: 0; } to { transform: none; opacity: 1; } }
-button, input { font: inherit; touch-action: manipulation; }
-button { cursor: pointer; }
-button:disabled { cursor: default; }
-button:focus-visible, input:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
-.tap { transition: transform .12s; }
-.tap:active { transform: scale(.97); }
-.no-scrollbar { scrollbar-width: none; }
-.no-scrollbar::-webkit-scrollbar { display: none; }
-@media (min-width: 700px) { body { background: #fff; } }
+html[data-app-theme="dark"] body {
+  background: #000;
+}
+.safe-bottom {
+  padding-bottom: calc(8.25rem + env(safe-area-inset-bottom));
+  overflow-x: clip;
+}
+.sheet {
+  animation: up 0.2s ease-out;
+}
+@keyframes up {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+button,
+input {
+  font: inherit;
+  touch-action: manipulation;
+}
+button {
+  cursor: pointer;
+}
+button:disabled {
+  cursor: default;
+}
+button:focus-visible,
+input:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+.tap {
+  transition: transform 0.12s;
+}
+.tap:active {
+  transform: scale(0.97);
+}
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+@media (max-width: 699px) {
+  input,
+  select,
+  textarea,
+  [contenteditable="true"] {
+    font-size: 16px !important;
+  }
+}
+@media (min-width: 700px) {
+  body {
+    background: #fff;
+  }
+}
 
-.theme-root { transition: background-color .2s ease, color .2s ease; }
+.theme-root {
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease;
+}
 .theme-root[data-theme="dark"] {
   color-scheme: dark;
   background: #050806 !important;
@@ -51,7 +111,11 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--brand); out
 .theme-root[data-theme="dark"] .theme-card,
 .theme-root[data-theme="dark"] [class~="bg-white"] {
   background-color: #101511 !important;
-  border-color: rgba(255,255,255,.07) !important;
+  border-color: rgba(255, 255, 255, 0.07) !important;
+}
+.theme-root[data-theme="dark"] [class~="bg-white/95"] {
+  background-color: rgba(16, 21, 17, 0.95) !important;
+  border-color: rgba(255, 255, 255, 0.07) !important;
 }
 .theme-root[data-theme="dark"] [class~="bg-[#f3f6f3]"],
 .theme-root[data-theme="dark"] [class~="bg-[#f5f7f5]"],
@@ -60,6 +124,31 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--brand); out
 }
 .theme-root[data-theme="dark"] [class~="bg-[#e5f3ea]"] {
   background-color: #12271d !important;
+}
+.theme-root[data-theme="dark"] [class~="bg-[#e6f3ec]"] {
+  background-color: #173c2b !important;
+}
+.theme-root[data-theme="dark"] [class~="bg-[#edf2ee]"] {
+  background-color: #1a231e !important;
+  color: #dce8e0 !important;
+}
+.theme-root[data-theme="dark"] [class~="bg-red-50"] {
+  background-color: rgba(185, 45, 55, 0.14) !important;
+}
+.theme-root[data-theme="dark"] [class~="text-red-700"] {
+  color: #ff9299 !important;
+}
+.theme-root[data-theme="dark"] [class~="border-black/10"] {
+  border-color: rgba(255, 255, 255, 0.11) !important;
+}
+.theme-root[data-theme="dark"] [class~="border-black/[.04]"],
+.theme-root[data-theme="dark"] [class~="border-black/[.05]"],
+.theme-root[data-theme="dark"] [class~="border-black/[.06]"],
+.theme-root[data-theme="dark"] [class~="border-black/5"] {
+  border-color: rgba(255, 255, 255, 0.07) !important;
+}
+.theme-root[data-theme="dark"] [class~="text-red-600"] {
+  color: #ff737d !important;
 }
 .theme-root[data-theme="dark"] [class~="bg-[#176b46]"] {
   background-color: #21885b !important;
@@ -71,27 +160,44 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--brand); out
   border-color: #4fc187 !important;
 }
 .theme-root[data-theme="dark"] [class~="border-[#176b46]/20"] {
-  border-color: rgba(98,209,150,.24) !important;
+  border-color: rgba(98, 209, 150, 0.24) !important;
 }
-.theme-root[data-theme="dark"] [class~="text-[#17231d]"] { color: #f3f7f4 !important; }
+.theme-root[data-theme="dark"] [class~="text-[#17231d]"] {
+  color: #f3f7f4 !important;
+}
 .theme-root[data-theme="dark"] [class~="text-[#53655c]"],
 .theme-root[data-theme="dark"] [class~="text-[#587067]"],
 .theme-root[data-theme="dark"] [class~="text-[#718078]"],
-.theme-root[data-theme="dark"] [class~="text-[#809087]"] { color: #9baca2 !important; }
-.theme-root[data-theme="dark"] nav { background: rgba(10,13,11,.94) !important; border-color: rgba(255,255,255,.07) !important; }
-.theme-root[data-theme="dark"] .bottom-nav button[aria-label="Nuevo gasto"] { border-color: #050806 !important; }
+.theme-root[data-theme="dark"] [class~="text-[#809087]"] {
+  color: #9baca2 !important;
+}
+.theme-root[data-theme="dark"] nav {
+  background: rgba(10, 13, 11, 0.94) !important;
+  border-color: rgba(255, 255, 255, 0.07) !important;
+}
+.theme-root[data-theme="dark"] .bottom-nav button[aria-label="Nuevo gasto"] {
+  border-color: #050806 !important;
+}
 
 html[data-app-theme="dark"] .ios-install-sheet {
   color-scheme: dark;
   background: #101511;
   color: #f3f7f4;
 }
-html[data-app-theme="dark"] .ios-install-sheet .ios-install-step { background: #17201b; }
-html[data-app-theme="dark"] .ios-install-sheet button[aria-label="Cerrar tutorial de instalación"] {
+html[data-app-theme="dark"] .ios-install-sheet .ios-install-step {
+  background: #17201b;
+}
+html[data-app-theme="dark"]
+  .ios-install-sheet
+  button[aria-label="Cerrar tutorial de instalación"] {
   background: #17201b;
   color: #9baca2;
 }
-html[data-app-theme="dark"] .ios-install-sheet .bg-black\/10 { background: rgba(255,255,255,.14); }
+html[data-app-theme="dark"] .ios-install-sheet .bg-black\/10 {
+  background: rgba(255, 255, 255, 0.14);
+}
 @media (prefers-reduced-motion: reduce) {
-  .ios-install-guide .sheet { animation: none; }
+  .ios-install-guide .sheet {
+    animation: none;
+  }
 }

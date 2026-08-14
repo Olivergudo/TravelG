@@ -1,0 +1,77 @@
+import { foods } from "./helpers";
+export const pantryDictionary = [
+  ...foods("bakery", [
+    ["Pan", "pan|panes|pan blanco|pan integral|pan molde|pan de molde|pan rallado"], ["Bolillo", "bolillo|bolillos"],
+    ["Telera", "telera|teleras"], ["Birote", "birote|birotes"], ["Hallulla", "hallulla|hallullas"],
+    ["Marraqueta", "marraqueta|marraquetas|pan batido|pan frances|pan francés"], ["Dobladita", "dobladita|dobladitas"],
+    ["Tortilla", "tortilla|tortillas|tortilla maiz|tortilla de maiz|tortilla harina|tortilla de harina"],
+    ["Pan pita", "pan pita|pita"], ["Baguette", "baguette|baguettes"], ["Croissant", "croissant|croissants|cuernito|cuernitos"],
+    ["Medialuna", "medialuna|medialunas"], ["Queque", "queque|queques|bizcocho|bizcochos"], ["Muffin", "muffin|muffins"],
+  ]),
+  ...foods("grain", [
+    ["Arroz", "arroz|arroz blanco|arroz integral|arroz jazmin|arroz jazmín|arroz basmati"], ["Pasta", "pasta|pastas"],
+    ["Fideos", "fideo|fideos|tallarines|tallarin|tallarín"], ["Espagueti", "espagueti|espaguetis|spaghetti"],
+    ["Macarrón", "macarron|macarrón|macarrones"], ["Lasaña", "lasana|lasaña|lasanas|lasañas"],
+    ["Avena", "avena|avena instantanea|avena instantánea"], ["Harina", "harina|harina trigo|harina de trigo|harina maiz|harina de maiz"],
+    ["Maicena", "maicena|fecula|fécula|almidon maiz|almidón maíz"], ["Cereal", "cereal|cereales"],
+    ["Granola", "granola|granolas"], ["Quinoa", "quinoa|quinua"], ["Cuscús", "cuscus|cuscús|couscous"],
+  ]),
+  ...foods("legume", [
+    ["Frijol", "frijol|frijoles|poroto|porotos|judia|judía|judias|judías"], ["Lenteja", "lenteja|lentejas"],
+    ["Garbanzo", "garbanzo|garbanzos"], ["Arveja", "arveja|arvejas|chicharo|chícharo|guisante|guisantes"],
+    ["Haba", "haba|habas"], ["Soya", "soya|soja|poroto soya"],
+  ]),
+  ...foods("pantry", [
+    ["Aceite", "aceite|aceite vegetal|aceite maravilla|aceite canola|aceite girasol"], ["Aceite de oliva", "aceite oliva|aceite de oliva"],
+    ["Vinagre", "vinagre|vinagre blanco|vinagre manzana|vinagre de manzana"], ["Sal", "sal|sal fina|sal gruesa|sal marina"],
+    ["Azúcar", "azucar|azúcar|azucar blanca|azúcar blanca|azucar rubia|azúcar rubia|azucar morena|azúcar morena"],
+    ["Endulzante", "endulzante|edulcorante|stevia|sucralosa"], ["Miel", "miel|miel abeja|miel de abeja"],
+    ["Cacao", "cacao|cacao polvo|cocoa"], ["Levadura", "levadura|levadura seca"], ["Polvo de hornear", "polvo hornear|polvo de hornear"],
+    ["Gelatina", "gelatina|gelatinas"], ["Caldo", "caldo|caldo pollo|caldo carne|consome|consomé"],
+    ["Conserva", "conserva|conservas"], ["Tomate en lata", "tomate lata|tomate en lata|tomate triturado"],
+    ["Choclo en lata", "choclo lata|maiz lata|maíz lata"], ["Sopa", "sopa|sopas|sopa instantanea|sopa instantánea"],
+  ]),
+  ...foods("spice", [
+    ["Pimienta", "pimienta|pimienta negra|pimienta blanca"], ["Paprika", "paprika|pimenton polvo|pimentón polvo"],
+    ["Comino", "comino|comino molido"], ["Orégano", "oregano|orégano"], ["Canela", "canela|canela molida|canela rama"],
+    ["Clavo", "clavo olor|clavo de olor"], ["Nuez moscada", "nuez moscada"], ["Cúrcuma", "curcuma|cúrcuma"],
+    ["Curry", "curry|curry polvo"], ["Ajo en polvo", "ajo polvo|ajo en polvo"], ["Cebolla en polvo", "cebolla polvo|cebolla en polvo"],
+    ["Romero", "romero"], ["Tomillo", "tomillo"], ["Albahaca", "albahaca"], ["Cilantro", "cilantro"],
+    ["Perejil", "perejil"], ["Chile en polvo", "chile polvo|chile en polvo|aji polvo|ají polvo"],
+  ]),
+  ...foods("sauce", [
+    ["Ketchup", "ketchup|catsup|catchup"], ["Mostaza", "mostaza|mostazas"], ["Mayonesa", "mayonesa|mayo"],
+    ["Salsa de tomate", "salsa tomate|salsa de tomate"], ["Salsa de soya", "salsa soya|salsa de soya|salsa soja"],
+    ["Teriyaki", "teriyaki|salsa teriyaki"], ["Salsa BBQ", "bbq|barbecue|salsa bbq"], ["Salsa inglesa", "salsa inglesa|worcestershire"],
+    ["Tabasco", "tabasco"], ["Salsa picante", "salsa picante|salsa chile"], ["Aderezo", "aderezo|aderezos|dressing"],
+    ["Vinagreta", "vinagreta|vinagretas"], ["Pesto", "pesto|salsa pesto"], ["Guacamole", "guacamole"],
+  ]),
+  ...foods("beverage", [
+    ["Agua", "agua|agua mineral|agua purificada|agua con gas|agua sin gas|agua saborizada"],
+    ["Jugo", "jugo|jugos|zumo|zumos|nectar|néctar|nectares|néctares"], ["Bebida", "bebida|bebidas|refresco|refrescos|gaseosa|gaseosas|soda|sodas"],
+    ["Coca Cola", "coca cola|coca-cola|cocacola"], ["Café", "cafe|café|cafe molido|café molido|cafe instantaneo|café instantáneo"],
+    ["Té", "te|té|te verde|té verde|te negro|té negro|infusion|infusión"], ["Energética", "energetica|energética|bebida energetica|bebida energética"],
+    ["Isotónica", "isotonica|isotónica|bebida isotonica|bebida isotónica"], ["Cerveza", "cerveza|cervezas"], ["Vino", "vino|vinos"],
+  ]),
+  ...foods("snack", [
+    ["Papas fritas", "papas fritas|papas chips|chips papa|chips"], ["Galletas", "galleta|galletas|galletitas"],
+    ["Barra de cereal", "barra cereal|barra de cereal|barrita cereal"], ["Maní", "mani|maní|cacahuate|cacahuates"],
+    ["Nuez", "nuez|nueces"], ["Almendra", "almendra|almendras"], ["Pistacho", "pistacho|pistachos|pistache|pistaches"],
+    ["Cabritas", "cabritas|palomitas|popcorn"], ["Nachos", "nachos|totopos"], ["Pretzel", "pretzel|pretzels"],
+  ]),
+  ...foods("sweet", [
+    ["Chocolate", "chocolate|chocolates|barra chocolate"], ["Dulce", "dulce|dulces"], ["Caramelo", "caramelo|caramelos"],
+    ["Gomitas", "gomita|gomitas|gominolas"], ["Helado", "helado|helados|nieve helada"], ["Mermelada", "mermelada|mermeladas"],
+    ["Flan", "flan|flanes"], ["Postre", "postre|postres"],
+  ]),
+  ...foods("frozen", [
+    ["Verduras congeladas", "verdura congelada|verduras congeladas|vegetales congelados"], ["Fruta congelada", "fruta congelada|frutas congeladas"],
+    ["Pizza", "pizza|pizzas|pizza congelada"], ["Papas congeladas", "papas congeladas|papa congelada"],
+    ["Nuggets", "nugget|nuggets|nuggets pollo"], ["Hamburguesa congelada", "hamburguesa congelada|hamburguesas congeladas"],
+  ]),
+  ...foods("prepared", [
+    ["Empanada", "empanada|empanadas"], ["Sushi", "sushi"], ["Ensalada", "ensalada|ensaladas|ensalada preparada"],
+    ["Sándwich", "sandwich|sándwich|sandwiches|sándwiches"], ["Tamales", "tamal|tamales"], ["Humitas", "humita|humitas"],
+    ["Tacos", "taco|tacos"], ["Burrito", "burrito|burritos"], ["Pollo asado", "pollo asado|pollo rostizado"],
+  ]),
+];

@@ -21,7 +21,7 @@ export function ChangePlanDialog({
         <h2 className="text-xl font-bold">¿Cambiar a {next}?</h2>
         <p className="mt-2 text-sm text-[#587067]">
           {user.plan === "basic"
-            ? `${user.displayName || user.email || "Este usuario"} tendrá acceso a Refrigerador, escáner de productos y recetas con IA.`
+            ? `${user.displayName || user.email || "Este usuario"} tendrá acceso al escáner de productos y a recetas con IA.`
             : "Perderá acceso a las funciones Pro. Sus datos no serán eliminados."}
         </p>
         <div className="mt-5 grid grid-cols-2 gap-3">

@@ -35,11 +35,6 @@ export const fridgeRepository = {
     return items;
   },
   async add(userId: string, input: FridgeItemInput, current: FridgeItem[]) {
-    const duplicate = current.find((item) => input.barcode ? item.barcode === input.barcode : item.name.trim().toLocaleLowerCase("es-CL") === input.name.trim().toLocaleLowerCase("es-CL"));
-    if (duplicate) {
-      const increment = input.quantity ?? 1;
-      return this.update(userId, duplicate.id, { quantity: (duplicate.quantity ?? 0) + increment }, current);
-    }
     const now = new Date().toISOString();
     const item: FridgeItem = { id: uid(), userId, name: input.name.trim(), barcode: input.barcode, quantity: input.quantity, unit: input.unit?.trim() || undefined, createdAt: now, updatedAt: now };
     const next = [...current, item];

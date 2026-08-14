@@ -9,7 +9,7 @@ export type Feature =
 export const FEATURES: Record<Feature, Plan> = {
   barcodeScanner: "pro",
   receiptScanner: "pro",
-  fridge: "pro",
+  fridge: "basic",
   aiRecipes: "pro",
 };
 
