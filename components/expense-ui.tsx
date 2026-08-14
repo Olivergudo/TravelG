@@ -2,6 +2,7 @@
 import { useRef, useState } from "react";
 import { Camera, GripVertical, Trash2, X } from "lucide-react";
 import type { Category, Expense } from "@/lib/types";
+import { categoryPalette, getCategoryBorderColor, getCategoryColor, getCategorySoftColor } from "@/lib/category-colors";
 
 const uid = () =>
   globalThis.crypto?.randomUUID?.() ??
@@ -42,11 +43,12 @@ export function CategoryPicker({ categories, value, onChange, recentIds = [] }: 
           key={category.id}
           aria-label={`Categoría ${category.name || categoryEmoji(category)}`}
           onClick={() => onChange(category.id)}
-          className={`relative flex min-h-[68px] min-w-0 flex-col items-center justify-center rounded-2xl border px-1 py-2 transition ${value === category.id ? "scale-[1.03] border-[#176b46] bg-[#e5f3ea] shadow-[inset_0_0_0_1px_#176b46]" : "border-black/5 bg-[#f3f6f3]"}`}
+          style={value === category.id ? { backgroundColor: getCategorySoftColor(category), borderColor: getCategoryBorderColor(category), boxShadow: `inset 0 0 0 1px ${getCategoryBorderColor(category)}` } : undefined}
+          className={`relative flex min-h-[68px] min-w-0 flex-col items-center justify-center rounded-2xl border px-1 py-2 transition ${value === category.id ? "scale-[1.03]" : "border-black/5 bg-[#f3f6f3]"}`}
         >
           <span className="text-[27px] leading-none">{categoryEmoji(category)}</span>
           {category.name && <span className="mt-1 max-w-full truncate text-[10px] font-semibold text-[#53655c]">{category.name}</span>}
-          {value === category.id && <span className="absolute right-1 top-1 grid h-4 w-4 place-items-center rounded-full bg-[#176b46] text-[10px] text-white">✓</span>}
+          {value === category.id && <span style={{ backgroundColor: getCategoryColor(category) }} className="absolute right-1 top-1 grid h-4 w-4 place-items-center rounded-full text-[10px] text-white">✓</span>}
         </button>
       ))}
     </div>
@@ -228,7 +230,7 @@ export function CategoryManager({
 }) {
   const [name, setName] = useState("");
   const [icon, setIcon] = useState("");
-  const [color, setColor] = useState("#4f8f73");
+  const [color, setColor] = useState<string>(categoryPalette[0]);
   const [creating, setCreating] = useState(false);
   const [editingEmojiId, setEditingEmojiId] = useState<string>();
   const categoriesWithoutOther = categories.filter((category) => category.id !== "other");
@@ -313,7 +315,8 @@ export function CategoryManager({
                 type="button"
                 onClick={() => setEditingEmojiId(category.id)}
                 aria-label={`Cambiar emoji de ${category.name || categoryEmoji(category)}`}
-                className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-white text-2xl"
+                style={{ backgroundColor: getCategorySoftColor(category) }}
+                className="grid h-11 w-11 shrink-0 place-items-center rounded-xl text-2xl"
               >
                 {categoryEmoji(category)}
               </button>
@@ -328,20 +331,13 @@ export function CategoryManager({
                 }
                 className="min-w-0 flex-1 bg-transparent font-semibold outline-none"
               />
-              <input
-                type="color"
-                value={category.color}
-                onChange={(e) =>
-                  onChange(
-                    categories.map((c) =>
-                      c.id === category.id
-                        ? { ...c, color: e.target.value }
-                        : c,
-                    ),
-                  )
-                }
-                className="h-8 w-8"
-              />
+              <button type="button" onClick={() => {
+                const currentIndex = categoryPalette.findIndex((value) => value.toLowerCase() === getCategoryColor(category).toLowerCase());
+                const next = categoryPalette[(currentIndex + 1) % categoryPalette.length];
+                onChange(categories.map((c) => c.id === category.id ? { ...c, color: next } : c));
+              }} aria-label={`Cambiar color de ${category.name || categoryEmoji(category)}`} className="grid h-11 w-11 shrink-0 place-items-center rounded-xl">
+                <span className="h-5 w-5 rounded-full ring-2 ring-white/70" style={{ backgroundColor: getCategoryColor(category) }}/>
+              </button>
               <button
                 disabled={usedCategoryIds.has(category.id)}
                 title={
@@ -366,7 +362,7 @@ export function CategoryManager({
           <form onSubmit={add} className="mt-5 space-y-4 rounded-3xl bg-[#f5f7f5] p-4">
             <div><b className="mb-2 block">Elige un emoji</b><EmojiGrid value={icon} select={setIcon} /></div>
             <label className="block"><span className="mb-2 block text-sm font-semibold">Nombre <span className="font-normal text-[#718078]">(opcional)</span></span><input value={name} onChange={(event) => setName(event.target.value)} className="min-h-12 w-full rounded-2xl bg-white px-4 outline-none" /></label>
-            <div className="flex items-center gap-3"><span className="text-sm font-semibold">Color <span className="font-normal text-[#718078]">(opcional)</span></span><input type="color" value={color} onChange={(event) => setColor(event.target.value)} className="h-11 w-11" /></div>
+            <div><span className="mb-2 block text-sm font-semibold">Color</span><ColorPalette value={color} select={setColor}/></div>
             {icon && orderedCategories.some((category) => categoryEmoji(category) === icon && !category.name && !name.trim()) && <p className="text-sm text-amber-700">Ya existe una categoría con este emoji.</p>}
             <button disabled={!icon} className="min-h-14 w-full rounded-2xl bg-[#176b46] px-5 font-bold text-white disabled:opacity-40">Crear categoría</button>
           </form>
@@ -407,4 +403,8 @@ function EmojiGrid({ value, select }: { value: string; select: (emoji: string) =
       </label>
     </div>
   );
+}
+
+function ColorPalette({ value, select }: { value: string; select: (color: string) => void }) {
+  return <div className="flex flex-wrap gap-2" role="group" aria-label="Color de categoría">{categoryPalette.map((color) => <button key={color} type="button" onClick={() => select(color)} aria-label={`Elegir color ${color}`} aria-pressed={value.toLowerCase() === color.toLowerCase()} className="grid h-11 w-11 place-items-center rounded-full"><span className={`h-7 w-7 rounded-full ${value.toLowerCase() === color.toLowerCase() ? "ring-2 ring-offset-2 ring-[#176b46]" : ""}`} style={{ backgroundColor: color }}/></button>)}</div>;
 }

@@ -5,22 +5,29 @@ import {
   MoreHorizontal,
   Moon,
   Plus,
-  ShoppingBasket,
+  ListChecks,
+  ReceiptText,
   Sun,
 } from "lucide-react";
 import { ShoppingV2 } from "./shopping-v2";
+import { ShoppingList } from "./shopping-list";
 import { ReceiptScanner } from "./receipt-scanner";
 import { categoryEmoji, CategoryManager, formatMoney, QuickExpenseForm } from "./expense-ui";
 import { useAppData } from "@/hooks/use-app-data";
 import type { AppData, Expense } from "@/lib/types";
 import { deleteExpense, saveExpense } from "@/lib/expense-sync";
 import { FinanceCharts, FinanceHeroDonut } from "./finance-charts";
+import { getCategoryColor, getCategorySoftColor } from "@/lib/category-colors";
 type Update = (fn: (data: AppData) => AppData) => void;
 
 export function AppShell() {
   const { data, update, ready } = useAppData();
-  const [tab, setTab] = useState<"finances" | "shopping">("finances");
+  const [tab, setTab] = useState<"finances" | "list" | "shopping">("finances");
   const [theme, setTheme] = useState<"light" | "dark">("light");
+  const [addingExpense, setAddingExpense] = useState(false);
+  const [scanningReceipt, setScanningReceipt] = useState(false);
+  const [managingCategories, setManagingCategories] = useState(false);
+  const [savedFeedback, setSavedFeedback] = useState(false);
   useEffect(() => {
     const saved = localStorage.getItem("gasto-listo-theme");
     const preferred = saved === "dark" || saved === "light"
@@ -34,6 +41,9 @@ export function AppShell() {
     localStorage.setItem("gasto-listo-theme", next);
     return next;
   });
+  useEffect(() => {
+    document.documentElement.dataset.appTheme = theme;
+  }, [theme]);
   if (!ready)
     return (
       <main className="grid min-h-screen place-items-center text-[#708078]">
@@ -41,9 +51,11 @@ export function AppShell() {
       </main>
     );
   return (
-    <main data-theme={theme} className="theme-root mx-auto min-h-screen max-w-2xl bg-[#f3f6f3] safe-bottom sm:shadow-[0_0_40px_rgba(23,61,45,.08)]">
+    <main data-theme={theme} className="theme-root mx-auto min-h-dvh w-full min-w-0 max-w-2xl bg-[#f3f6f3] safe-bottom sm:shadow-[0_0_40px_rgba(23,61,45,.08)]">
       {tab === "finances" ? (
         <Finances data={data} update={update} dark={theme === "dark"} toggleTheme={toggleTheme} />
+      ) : tab === "list" ? (
+        <ShoppingList data={data} update={update} />
       ) : (
         <ShoppingV2
           data={data}
@@ -51,20 +63,66 @@ export function AppShell() {
           showFinances={() => setTab("finances")}
         />
       )}
-      <nav className="fixed bottom-0 left-1/2 z-30 flex w-full max-w-2xl -translate-x-1/2 border-t border-black/[.06] bg-white/95 px-5 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl">
+      <nav aria-label="Navegación principal" className="bottom-nav fixed inset-x-0 bottom-0 z-30 mx-auto grid w-full min-w-0 max-w-2xl grid-cols-3 border-t border-black/[.06] bg-white/95 px-2 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl">
         <Nav
           active={tab === "finances"}
           click={() => setTab("finances")}
           icon={<BadgeDollarSign />}
           label="Finanzas"
         />
-        <Nav
-          active={tab === "shopping"}
-          click={() => setTab("shopping")}
-          icon={<ShoppingBasket />}
-          label="Compras"
-        />
+        <Nav active={tab === "list"} click={() => setTab("list")} icon={<ListChecks />} label="Lista" />
+        <Nav active={tab === "shopping"} click={() => setTab("shopping")} icon={<ReceiptText />} label="Compras" />
+        <button
+          type="button"
+          onClick={() => setAddingExpense(true)}
+          aria-label="Nuevo gasto"
+          className="tap absolute left-1/2 -top-3 grid h-14 w-14 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-[20px] border-4 border-[#f3f6f3] bg-[#176b46] text-white shadow-[0_8px_22px_rgba(23,107,70,.32)] transition-transform duration-150"
+        >
+          <Plus size={30} strokeWidth={2.5} />
+        </button>
       </nav>
+      {addingExpense && (
+        <QuickExpenseForm
+          categories={data.categories}
+          close={() => setAddingExpense(false)}
+          save={(expense) => {
+            update((current) => saveExpense(current, expense));
+            setAddingExpense(false);
+            setTab("finances");
+            setSavedFeedback(true);
+            window.setTimeout(() => setSavedFeedback(false), 2200);
+          }}
+          onScanReceipt={() => setScanningReceipt(true)}
+          onManageCategories={() => setManagingCategories(true)}
+        />
+      )}
+      {scanningReceipt && (
+        <ReceiptScanner
+          data={data}
+          update={update}
+          close={() => setScanningReceipt(false)}
+          completed={() => {
+            setScanningReceipt(false);
+            setAddingExpense(false);
+            setTab("finances");
+            setSavedFeedback(true);
+            window.setTimeout(() => setSavedFeedback(false), 2200);
+          }}
+        />
+      )}
+      {managingCategories && (
+        <CategoryManager
+          categories={data.categories}
+          usedCategoryIds={new Set(data.expenses.map((expense) => expense.categoryId))}
+          close={() => setManagingCategories(false)}
+          onChange={(categories) => update((current) => ({ ...current, categories }))}
+        />
+      )}
+      {savedFeedback && (
+        <div role="status" className="fixed bottom-[calc(5.75rem+env(safe-area-inset-bottom))] left-1/2 z-[60] -translate-x-1/2 rounded-full bg-[#173d2d] px-4 py-2 text-sm font-semibold text-white shadow-lg">
+          Gasto guardado
+        </div>
+      )}
     </main>
   );
 }
@@ -82,7 +140,7 @@ function Nav({
   return (
     <button
       onClick={click}
-      className={`flex min-h-16 flex-1 flex-col items-center justify-center gap-1.5 py-2 text-[13px] font-semibold ${active ? "text-[#176b46]" : "text-[#718078]"}`}
+      className={`flex min-h-20 flex-1 flex-col items-center justify-center gap-1 pt-4 text-[12px] font-semibold transition-colors duration-150 ${active ? "text-[#176b46]" : "text-[#718078]"}`}
     >
       {icon}
       {label}
@@ -92,8 +150,6 @@ function Nav({
 
 function Finances({ data, update, dark, toggleTheme }: { data: AppData; update: Update; dark: boolean; toggleTheme: () => void }) {
   const [editing, setEditing] = useState<Expense>();
-  const [adding, setAdding] = useState(false);
-  const [scanningReceipt, setScanningReceipt] = useState(false);
   const [managingCategories, setManagingCategories] = useState(false);
   const today = new Date();
   const month = data.expenses.filter((e) => {
@@ -122,7 +178,6 @@ function Finances({ data, update, dark, toggleTheme }: { data: AppData; update: 
   const largestCategoryTotal = totals[0]?.total || 1;
   const save = (expense: Expense) => {
     update((current) => saveExpense(current, expense));
-    setAdding(false);
     setEditing(undefined);
   };
   return (
@@ -135,20 +190,14 @@ function Finances({ data, update, dark, toggleTheme }: { data: AppData; update: 
         </div>
         <button onClick={toggleTheme} aria-label={dark ? "Usar tema claro" : "Usar tema oscuro"} className="theme-card grid h-12 w-12 place-items-center rounded-2xl bg-white text-[#176b46] shadow-sm">{dark ? <Sun size={21} /> : <Moon size={21} />}</button>
       </header>
-      <section className="mx-4 rounded-[30px] bg-[#173d2d] p-6 text-white shadow-[0_10px_30px_rgba(23,61,45,.12)]">
+      <section className="mx-4 min-w-0 rounded-[30px] bg-[#173d2d] p-6 text-white shadow-[0_10px_30px_rgba(23,61,45,.12)]">
         <FinanceHeroDonut expenses={month} categories={data.categories} total={total} />
         <div className="mt-6 grid grid-cols-2 gap-3 border-t border-white/10 pt-4">
           <span className="text-[13px] text-white/65">Esta semana <b className="mt-1 block text-base text-white">{formatMoney(week)}</b></span>
           <span className="text-[13px] text-white/65">Movimientos <b className="mt-1 block text-base text-white">{month.length} gastos</b></span>
         </div>
       </section>
-      <div className="space-y-6 px-4">
-        <button
-          onClick={() => setAdding(true)}
-          className="mt-4 flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-[#176b46] px-5 text-base font-bold text-white shadow-[0_7px_18px_rgba(23,107,70,.16)] active:scale-[.99]"
-        >
-          <Plus /> Nuevo gasto
-        </button>
+      <div className="mt-5 w-full min-w-0 max-w-full space-y-6 px-4">
         <FinanceCharts expenses={month} categories={data.categories} total={total} dark={dark} showDistribution={false} />
         <section>
           <h2 className="mb-3 text-xl font-bold tracking-[-.01em]">Por categoría</h2>
@@ -159,14 +208,14 @@ function Finances({ data, update, dark, toggleTheme }: { data: AppData; update: 
                 type="button"
                 className="flex min-h-[68px] w-full items-center border-b border-black/5 px-4 py-3 text-left last:border-0"
               >
-                <span className="mr-3 text-2xl">{categoryEmoji(category)}</span>
+                <span style={{ backgroundColor: getCategorySoftColor(category) }} className="mr-3 grid h-11 w-11 shrink-0 place-items-center rounded-2xl text-2xl">{categoryEmoji(category)}</span>
                 <span className="min-w-0 flex-1 pr-3">
                   {category.name && <b className="block truncate">{category.name}</b>}
                   <span className="mt-1.5 block h-1.5 overflow-hidden rounded-full bg-[#dfe8e2]">
-                    <span className="block h-full rounded-full bg-[#2f9d68]" style={{ width: `${Math.max(5, total / largestCategoryTotal * 100)}%` }} />
+                    <span className="block h-full rounded-full" style={{ width: `${Math.max(5, total / largestCategoryTotal * 100)}%`, backgroundColor: getCategoryColor(category) }} />
                   </span>
                 </span>
-                <b>{formatMoney(total)}</b>
+                <b className="shrink-0 whitespace-nowrap text-sm">{formatMoney(total)}</b>
               </button>
             ))}
             {!totals.length && (
@@ -187,16 +236,16 @@ function Finances({ data, update, dark, toggleTheme }: { data: AppData; update: 
                   onClick={() => setEditing(e)}
                   className="flex min-h-[76px] w-full items-center gap-3 border-b border-black/5 px-4 py-3.5 text-left last:border-0"
                 >
-                  <span className="text-2xl">{categoryEmoji(c)}</span>
+                  <span style={{ backgroundColor: getCategorySoftColor(c) }} className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl text-2xl">{categoryEmoji(c)}</span>
                   <span className="min-w-0 flex-1">
                     <b className="block truncate text-[15px]">{e.description}</b>
-                    <small className="mt-1 block text-[13px] text-[#718078]">
+                    <small className="mt-1 block truncate text-[13px] text-[#718078]">
                       {c?.name ? `${c.name} · ` : ""}
                       {new Date(e.date).toLocaleDateString("es-CL")}
                     </small>
                   </span>
-                  <b>{formatMoney(e.amount)}</b>
-                  <MoreHorizontal size={18} />
+                  <b className="shrink-0 whitespace-nowrap text-sm">{formatMoney(e.amount)}</b>
+                  <span className="grid h-11 w-8 shrink-0 place-items-center" aria-hidden="true"><MoreHorizontal size={20} /></span>
                 </button>
               );
             })}
@@ -208,16 +257,14 @@ function Finances({ data, update, dark, toggleTheme }: { data: AppData; update: 
           </div>
         </section>
       </div>
-      {(adding || editing) && (
+      {editing && (
         <QuickExpenseForm
           categories={data.categories}
           expense={editing}
           close={() => {
-            setAdding(false);
             setEditing(undefined);
           }}
           save={save}
-          onScanReceipt={() => setScanningReceipt(true)}
           onManageCategories={() => setManagingCategories(true)}
           remove={
             editing
@@ -228,17 +275,6 @@ function Finances({ data, update, dark, toggleTheme }: { data: AppData; update: 
                 }
               : undefined
           }
-        />
-      )}
-      {scanningReceipt && (
-        <ReceiptScanner
-          data={data}
-          update={update}
-          close={() => setScanningReceipt(false)}
-          completed={() => {
-            setAdding(false);
-            setEditing(undefined);
-          }}
         />
       )}
       {managingCategories && (

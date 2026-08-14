@@ -1,28 +1,29 @@
-import type { AppData, Category, PendingProduct, Purchase, PurchaseItem } from "./types";
+import type { AppData, Category, Purchase, PurchaseItem, ShoppingListItem } from "./types";
 import { isSupabaseConfigured, supabase } from "./supabase";
+import { getCategoryColor, knownCategoryColors } from "./category-colors";
 const KEY = "gasto-listo-data-v1";
 export const defaultCategories = [
-  { id: "supermarket", name: "Supermercado", color: "#2f9d68", icon: "🛒" },
-  { id: "transport", name: "Transporte", color: "#438de0", icon: "🚗" },
-  { id: "restaurant", name: "Restaurante", color: "#e87945", icon: "🍽️" },
-  { id: "nightlife", name: "Antro", color: "#a855c7", icon: "🍸" },
-  { id: "home", name: "Casa", color: "#e7af32", icon: "🏠" },
-  { id: "shopping", name: "Compras", color: "#db5c87", icon: "🛍️" },
+  { id: "supermarket", name: "Supermercado", color: "#1F8A5B", icon: "🛒" },
+  { id: "transport", name: "Transporte", color: "#317A78", icon: "🚗" },
+  { id: "restaurant", name: "Restaurante", color: "#268C82", icon: "🍽️" },
+  { id: "nightlife", name: "Antro", color: "#4FAE9A", icon: "🍸" },
+  { id: "home", name: "Casa", color: "#748E7A", icon: "🏠" },
+  { id: "shopping", name: "Compras", color: "#3D8F76", icon: "🛍️" },
   {
     id: "entertainment",
     name: "Entretenimiento",
-    color: "#7767d8",
+    color: "#176B50",
     icon: "🎮",
   },
-  { id: "health", name: "Salud", color: "#dc5c5c", icon: "💊" },
-  { id: "other", name: "Otro", color: "#718078", icon: "•••" },
+  { id: "health", name: "Salud", color: "#55A995", icon: "💊" },
+  { id: "other", name: "Otro", color: "#7D8983", icon: "•••" },
 ];
 const categories = defaultCategories;
 export const emptyData: AppData = {
-  schemaVersion: 2,
+  schemaVersion: 3,
   expenses: [],
   categories,
-  pendingProducts: [],
+  shoppingListItems: [],
   purchases: [],
 };
 export interface DataRepository {
@@ -57,6 +58,8 @@ type LegacySession = {
   items?: LegacySessionItem[];
 };
 type Stored = Partial<AppData> & {
+  pendingProducts?: Array<Partial<ShoppingListItem> & { id: string; name: string; checked?: boolean }>;
+  activePurchase?: unknown;
   lists?: LegacyList[];
   shoppingSessions?: LegacySession[];
 };
@@ -72,11 +75,7 @@ const normalize = (name: string) =>
 function migrate(value: unknown): AppData {
   if (!value || typeof value !== "object") return emptyData;
   const old = value as Stored;
-  if (
-    old.schemaVersion === 2 &&
-    Array.isArray(old.pendingProducts) &&
-    Array.isArray(old.purchases)
-  ) {
+  if (Array.isArray(old.shoppingListItems) && Array.isArray(old.purchases)) {
     return {
       ...emptyData,
       ...old,
@@ -84,11 +83,20 @@ function migrate(value: unknown): AppData {
         const category = value as Category;
         return {
           ...category,
+          color: knownCategoryColors[category.id] || getCategoryColor(category),
           name: category.name || "",
           emoji: category.emoji || category.icon || "💸",
           icon: category.emoji || category.icon || "💸",
         };
       }),
+      schemaVersion: 3,
+      shoppingListItems: old.shoppingListItems.map((item) => ({
+        id: item.id,
+        name: item.name,
+        completed: Boolean(item.completed),
+        createdAt: item.createdAt,
+        updatedAt: item.updatedAt,
+      })),
     } as AppData;
   }
   if (Array.isArray(old.pendingProducts) && Array.isArray(old.purchases)) {
@@ -96,13 +104,13 @@ function migrate(value: unknown): AppData {
     const mergedCategories = [
       ...defaultCategories,
       ...existing.filter((c) => !defaultCategories.some((d) => d.id === c.id)),
-    ];
+    ].map((category) => ({ ...category, color: knownCategoryColors[category.id] || getCategoryColor(category) }));
     const categoryMap: Record<string, string> = {
       food: "supermarket",
       fun: "entertainment",
     };
     return {
-      schemaVersion: 2,
+      schemaVersion: 3,
       expenses: Array.isArray(old.expenses)
         ? old.expenses.map((expense) => ({
             ...expense,
@@ -112,13 +120,18 @@ function migrate(value: unknown): AppData {
           }))
         : [],
       categories: mergedCategories,
-      pendingProducts: old.pendingProducts,
+      shoppingListItems: old.pendingProducts.map((item) => ({
+        id: item.id,
+        name: item.name,
+        completed: Boolean(item.completed ?? item.checked),
+        createdAt: item.createdAt || new Date().toISOString(),
+        updatedAt: item.updatedAt || item.createdAt || new Date().toISOString(),
+      })),
       purchases: old.purchases,
-      activePurchase: old.activePurchase,
     };
   }
   const seen = new Set<string>();
-  const pending: PendingProduct[] = [];
+  const pending: ShoppingListItem[] = [];
   (old.lists || [])
     .flatMap((l) => l.items || [])
     .filter((i) => !i.completed)
@@ -130,8 +143,7 @@ function migrate(value: unknown): AppData {
       pending.push({
         id: i.id || uid(),
         name: i.name.trim(),
-        normalizedName: key,
-        defaultQuantity: i.quantity || 1,
+        completed: false,
         createdAt: at,
         updatedAt: i.updatedAt || at,
       });
@@ -160,7 +172,7 @@ function migrate(value: unknown): AppData {
     };
   });
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     expenses: Array.isArray(old.expenses)
       ? old.expenses.map((expense) => ({
           ...expense,
@@ -174,7 +186,7 @@ function migrate(value: unknown): AppData {
         }))
       : [],
     categories: defaultCategories,
-    pendingProducts: pending,
+    shoppingListItems: pending,
     purchases,
   };
 }
@@ -219,14 +231,14 @@ class SupabaseRepository implements DataRepository {
     if (data) {
       const remote = migrate(data);
       const local = await this.local.load();
-      const localChecked = new Map(
-        local.pendingProducts.map((product) => [product.id, product.checked]),
+      const localCompleted = new Map(
+        local.shoppingListItems.map((item) => [item.id, item.completed]),
       );
       return {
         ...remote,
-        pendingProducts: remote.pendingProducts.map((product) => ({
-          ...product,
-          checked: product.checked ?? localChecked.get(product.id) ?? false,
+        shoppingListItems: remote.shoppingListItems.map((item) => ({
+          ...item,
+          completed: item.completed ?? localCompleted.get(item.id) ?? false,
         })),
       };
     }
@@ -258,8 +270,18 @@ class SupabaseRepository implements DataRepository {
 
   private async write(data: AppData) {
     if (!supabase) return;
-    const payload: AppData = {
+    const payload = {
       ...data,
+      schemaVersion: 3,
+      pendingProducts: data.shoppingListItems.map((item) => ({
+        id: item.id,
+        name: item.name,
+        normalizedName: normalize(item.name),
+        defaultQuantity: 1,
+        checked: item.completed,
+        createdAt: item.createdAt,
+        updatedAt: item.updatedAt,
+      })),
       categories: data.categories.map((category) => ({
         ...category,
         name: category.name || "",

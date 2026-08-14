@@ -18,12 +18,10 @@ export type Expense = {
   createdAt: string;
   updatedAt: string;
 };
-export type PendingProduct = {
+export type ShoppingListItem = {
   id: string;
   name: string;
-  normalizedName: string;
-  defaultQuantity: number;
-  checked?: boolean;
+  completed: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -49,26 +47,12 @@ export type Purchase = {
   expenseId?: string;
   items: PurchaseItem[];
 };
-export type DraftItem = {
-  sourcePendingProductId?: string;
-  productName: string;
-  quantity: number;
-  unitPrice: number;
-  addedDuringShopping: boolean;
-  addToPending: boolean;
-};
-export type ActivePurchase = {
-  id: string;
-  startedAt: string;
-  items: DraftItem[];
-};
 export type AppData = {
-  schemaVersion: 2;
+  schemaVersion: 3;
   expenses: Expense[];
   categories: Category[];
-  pendingProducts: PendingProduct[];
+  shoppingListItems: ShoppingListItem[];
   purchases: Purchase[];
-  activePurchase?: ActivePurchase;
 };
 export type ScannedReceiptItem = {
   id: string;

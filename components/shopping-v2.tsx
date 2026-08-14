@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { categoryEmoji, formatMoney, QuickExpenseForm } from "./expense-ui";
 import type { AppData, Category, Expense, Purchase } from "@/lib/types";
 import { deleteExpense, saveExpense } from "@/lib/expense-sync";
+import { getCategoryBorderColor, getCategorySoftColor } from "@/lib/category-colors";
 
 type Update = (fn: (data: AppData) => AppData) => void;
 const monthKey = (value: string) => new Date(value).toLocaleDateString("es-CL", { month: "long", year: "numeric" });
@@ -40,11 +41,6 @@ function PurchaseHistory({ data, open }: { data: AppData; open: (id: string) => 
   const [query, setQuery] = useState("");
   const [categoryId, setCategoryId] = useState("all");
   const [showMore, setShowMore] = useState(false);
-  const current = new Date();
-  const thisMonth = data.purchases.filter((purchase) => {
-    const date = new Date(purchase.completedAt);
-    return date.getMonth() === current.getMonth() && date.getFullYear() === current.getFullYear();
-  });
   const purchaseCategoryIds = [...new Set(data.purchases.map((purchase) =>
     data.expenses.find((expense) => expense.id === purchase.expenseId)?.categoryId,
   ).filter((id): id is string => Boolean(id)))];
@@ -65,15 +61,12 @@ function PurchaseHistory({ data, open }: { data: AppData; open: (id: string) => 
     });
     return [...map.entries()];
   }, [filteredPurchases]);
-  const total = thisMonth.reduce((sum, purchase) => sum + purchase.total, 0);
-
   return <>
     <header className="px-5 pb-5 pt-[max(2rem,env(safe-area-inset-top))]"><p className="text-[13px] font-bold uppercase tracking-[.18em] text-[#6f8278]">Historial</p><h1 className="mt-1 text-[30px] font-bold leading-tight">Compras</h1></header>
     <div className="space-y-7 px-4 pb-28">
-      <section className="rounded-[28px] bg-[#173d2d] p-5 text-white"><p className="text-sm text-white/65">Compras este mes</p><p className="mt-2 text-3xl font-bold">{formatMoney(total)}</p><p className="mt-3 text-sm text-white/65">{thisMonth.length} {thisMonth.length === 1 ? "compra" : "compras"}</p></section>
       <section className="space-y-3">
         <div className="relative"><Search className="absolute left-4 top-1/2 -translate-y-1/2 text-[#718078]" size={19}/><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar compras…" className="theme-card min-h-14 w-full rounded-2xl border border-black/[.04] bg-white py-3 pl-12 pr-4 outline-none"/></div>
-        {purchaseCategories.length > 0 && <div className="grid grid-cols-4 gap-2">{primaryCategories.map((category) => <button key={category.id} onClick={() => setCategoryId((current) => current === category.id ? "all" : category.id)} aria-label={`Filtrar por ${category.name || categoryEmoji(category)}`} className={`min-h-12 rounded-2xl border text-xl ${categoryId === category.id ? "border-[#176b46] bg-[#e5f3ea]" : "theme-card border-black/[.04] bg-white"}`}>{categoryEmoji(category)}</button>)}{remainingCategories.length > 0 && <button onClick={() => setShowMore((current) => !current)} className="theme-card flex min-h-12 items-center justify-center rounded-2xl border border-black/[.04] bg-white text-xs font-bold">Otros <ChevronDown size={15} className={showMore ? "rotate-180" : ""}/></button>}{showMore && remainingCategories.map((category) => <button key={category.id} onClick={() => setCategoryId((current) => current === category.id ? "all" : category.id)} className={`min-h-12 rounded-2xl border text-xl ${categoryId === category.id ? "border-[#176b46] bg-[#e5f3ea]" : "theme-card border-black/[.04] bg-white"}`}>{categoryEmoji(category)}</button>)}</div>}
+        {purchaseCategories.length > 0 && <div className="grid grid-cols-4 gap-2">{primaryCategories.map((category) => <button key={category.id} onClick={() => setCategoryId((current) => current === category.id ? "all" : category.id)} aria-label={`Filtrar por ${category.name || categoryEmoji(category)}`} style={categoryId === category.id ? { backgroundColor: getCategorySoftColor(category), borderColor: getCategoryBorderColor(category) } : undefined} className={`min-h-12 rounded-2xl border text-xl ${categoryId === category.id ? "" : "theme-card border-black/[.04] bg-white"}`}>{categoryEmoji(category)}</button>)}{remainingCategories.length > 0 && <button onClick={() => setShowMore((current) => !current)} className="theme-card flex min-h-12 items-center justify-center rounded-2xl border border-black/[.04] bg-white text-xs font-bold">Otros <ChevronDown size={15} className={showMore ? "rotate-180" : ""}/></button>}{showMore && remainingCategories.map((category) => <button key={category.id} onClick={() => setCategoryId((current) => current === category.id ? "all" : category.id)} style={categoryId === category.id ? { backgroundColor: getCategorySoftColor(category), borderColor: getCategoryBorderColor(category) } : undefined} className={`min-h-12 rounded-2xl border text-xl ${categoryId === category.id ? "" : "theme-card border-black/[.04] bg-white"}`}>{categoryEmoji(category)}</button>)}</div>}
       </section>
       {!groups.length && <section className="theme-card rounded-[28px] bg-white p-8 text-center"><ShoppingBasket className="mx-auto mb-3 text-[#91a098]" size={32}/><h2 className="font-bold">Aún no hay compras</h2><p className="mt-1 text-sm text-[#718078]">Registra un gasto de supermercado desde Finanzas.</p></section>}
       {groups.map(([month, purchases]) => <section key={month}>
