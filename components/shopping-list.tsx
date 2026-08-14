@@ -1,13 +1,13 @@
 "use client";
 
-import { Check, Circle, ListChecks, LoaderCircle, Pencil, Plus, Trash2, X } from "lucide-react";
+import { Check, ChevronLeft, Circle, ListChecks, LoaderCircle, Pencil, Plus, Trash2, X } from "lucide-react";
 import { useRef, useState } from "react";
 import type { AppData, ShoppingListItem } from "@/lib/types";
 
 type Update = (fn: (data: AppData) => AppData) => void;
 const uid = () => globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
-export function ShoppingList({ data, update }: { data: AppData; update: Update }) {
+export function ShoppingList({ data, update, showFridge }: { data: AppData; update: Update; showFridge: () => void }) {
   const [name, setName] = useState("");
   const [editingItem, setEditingItem] = useState<ShoppingListItem>();
   const input = useRef<HTMLInputElement>(null);
@@ -46,10 +46,11 @@ export function ShoppingList({ data, update }: { data: AppData; update: Update }
   };
 
   return <>
-    <header className="px-5 pb-5 pt-[max(2rem,env(safe-area-inset-top))]">
-      <p className="text-[13px] font-bold uppercase tracking-[.18em] text-[#6f8278]">Checklist</p>
+    <header className="flex items-start gap-3 px-5 pb-5 pt-[max(2rem,env(safe-area-inset-top))]">
+      <button type="button" onClick={showFridge} aria-label="Volver al Refrigerador" className="theme-card mt-0.5 grid h-11 w-11 shrink-0 place-items-center rounded-full border border-black/[.06] bg-white"><ChevronLeft size={21}/></button>
+      <div><p className="text-[13px] font-bold uppercase tracking-[.18em] text-[#6f8278]">Checklist</p>
       <h1 className="mt-1 text-[30px] font-bold leading-tight">Lista</h1>
-      <p className="mt-1 text-sm text-[#718078]">{pending.length} {pending.length === 1 ? "pendiente" : "pendientes"}</p>
+      <p className="mt-1 text-sm text-[#718078]">{pending.length} {pending.length === 1 ? "pendiente" : "pendientes"}</p></div>
     </header>
     <div className="space-y-7 px-4">
       <form onSubmit={add} className="theme-card flex min-w-0 gap-2 rounded-2xl border border-black/[.04] bg-white p-2 shadow-sm">

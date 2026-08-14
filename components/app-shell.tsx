@@ -4,17 +4,19 @@ import type { User } from "@supabase/supabase-js";
 import {
   BadgeDollarSign,
   CheckCircle2,
+  ChevronRight,
   Plus,
-  ListChecks,
   LoaderCircle,
   ReceiptText,
   Refrigerator,
+  House,
   UserRound,
 } from "lucide-react";
-import { ShoppingV2 } from "./shopping-v2";
+import { buildPurchaseHistory, ShoppingV2 } from "./shopping-v2";
 import { ShoppingList } from "./shopping-list";
 import { ReceiptScanner } from "./receipt-scanner";
 import {
+  categoryEmoji,
   CategoryManager,
   QuickExpenseForm,
 } from "./expense-ui";
@@ -34,14 +36,21 @@ import { useUserPlan } from "@/hooks/use-user-plan";
 import { canUseFeature } from "@/lib/features/plans";
 import { formatCurrency, isCurrency, type Currency } from "@/lib/currency";
 import { requiredPreferences } from "@/lib/user-preferences";
+import { RoomiesScreen } from "./roomies-screen";
+
+type MainTab = "finances" | "list" | "fridge" | "roomies" | "shopping";
+
 export function AppShell() {
   const [authReady, setAuthReady] = useState(!isSupabaseConfigured);
   const [authUser, setAuthUser] = useState<User | null>(null);
   const { data, update, ready, reload } = useAppData(authUser?.id);
   const [recoveringPassword, setRecoveringPassword] = useState(false);
-  const [tab, setTab] = useState<"finances" | "list" | "fridge" | "shopping">(
-    "finances",
-  );
+  const [tab, setTab] = useState<MainTab>(() => {
+    if (typeof window === "undefined") return "finances";
+    const requested = new URLSearchParams(window.location.search).get("tab");
+    return requested === "roomies" ? "roomies" : requested === "purchases" ? "shopping" : requested === "list" ? "list" : "finances";
+  });
+  const [roomiesAttention, setRoomiesAttention] = useState(0);
   const [theme, setTheme] = useState<"light" | "dark">("dark");
   const [currency, setCurrency] = useState<Currency>("CLP");
   const [addingExpense, setAddingExpense] = useState(false);
@@ -66,6 +75,26 @@ export function AppShell() {
     entitlements && canUseFeature(entitlements, "aiRecipes"),
   );
   const showGlobalExpenseButton = tab === "finances";
+  const selectTab = (next: MainTab) => {
+    if (tab === "shopping" || tab === "list") {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("tab");
+      window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+    }
+    setTab(next);
+  };
+  const openPurchases = () => {
+    const url = new URL(window.location.href);
+    url.searchParams.set("tab", "purchases");
+    window.history.pushState({}, "", `${url.pathname}${url.search}${url.hash}`);
+    setTab("shopping");
+  };
+  const openShoppingList = () => {
+    const url = new URL(window.location.href);
+    url.searchParams.set("tab", "list");
+    window.history.pushState({}, "", `${url.pathname}${url.search}${url.hash}`);
+    setTab("list");
+  };
   const required = requiredPreferences(authUser?.user_metadata);
   const displayName = required.displayName;
   const configuredCurrency = required.currency;
@@ -107,8 +136,37 @@ export function AppShell() {
     });
   }, [authUser]);
   useEffect(() => {
+    const restoreFromUrl = () => {
+      const requested = new URLSearchParams(window.location.search).get("tab");
+      setTab(requested === "purchases" ? "shopping" : requested === "roomies" ? "roomies" : requested === "list" ? "list" : "finances");
+    };
+    window.addEventListener("popstate", restoreFromUrl);
+    return () => window.removeEventListener("popstate", restoreFromUrl);
+  }, []);
+  useEffect(() => {
     document.documentElement.dataset.appTheme = theme;
   }, [theme]);
+  useEffect(() => {
+    if (!supabase || !authUser) return;
+    let active = true;
+    const refreshAttention = async () => {
+      const { data: debts } = await supabase!
+        .from("replacement_debts")
+        .select("debtor_user_id,owner_user_id,status")
+        .in("status", ["pending", "awaiting_confirmation"]);
+      if (!active || !debts) return;
+      setRoomiesAttention(debts.filter((debt) =>
+        (debt.debtor_user_id === authUser.id && debt.status === "pending") ||
+        (debt.owner_user_id === authUser.id && debt.status === "awaiting_confirmation"),
+      ).length);
+    };
+    queueMicrotask(() => void refreshAttention());
+    const channel = supabase
+      .channel(`roomies-attention:${authUser.id}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "replacement_debts" }, () => void refreshAttention())
+      .subscribe();
+    return () => { active = false; void supabase?.removeChannel(channel); };
+  }, [authUser]);
   if (!authReady || (authUser && (!ready || !planReady)))
     return (
       <main className="grid min-h-screen place-items-center text-[#708078]">
@@ -141,9 +199,10 @@ export function AppShell() {
             if (isCurrency(user.user_metadata.currency)) setCurrency(user.user_metadata.currency);
             setAuthUser(user);
           }}
+          openPurchases={openPurchases}
         />
       ) : tab === "list" ? (
-        <ShoppingList data={data} update={update} />
+        <ShoppingList data={data} update={update} showFridge={() => selectTab("fridge")} />
       ) : tab === "fridge" && authUser ? (
         <FridgeScreen
           userId={authUser.id}
@@ -151,44 +210,42 @@ export function AppShell() {
           update={update}
           canScanProducts={canScanProducts}
           canCook={canCook}
+          openShoppingList={openShoppingList}
         />
+      ) : tab === "roomies" && authUser ? (
+        <RoomiesScreen userId={authUser.id} onAttentionChange={setRoomiesAttention} />
       ) : (
         <ShoppingV2
           data={data}
           update={update}
           currency={currency}
-          showFinances={() => setTab("finances")}
+          showFinances={() => selectTab("finances")}
         />
       )}
       <nav
         aria-label="Navegación principal"
-        className={`bottom-nav fixed inset-x-0 bottom-0 z-30 mx-auto grid w-full min-w-0 max-w-2xl ${hasFridge ? "grid-cols-4" : "grid-cols-3"} border-t border-black/[.06] bg-white/95 px-2 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl`}
+        className={`bottom-nav fixed inset-x-0 bottom-0 z-30 mx-auto grid w-full min-w-0 max-w-2xl ${hasFridge ? "grid-cols-3" : "grid-cols-2"} border-t border-black/[.06] bg-white/95 px-1 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl`}
       >
         <Nav
-          active={tab === "finances"}
-          click={() => setTab("finances")}
+          active={tab === "finances" || tab === "shopping"}
+          click={() => selectTab("finances")}
           icon={<BadgeDollarSign />}
           label="Finanzas"
         />
-        <Nav
-          active={tab === "list"}
-          click={() => setTab("list")}
-          icon={<ListChecks />}
-          label="Lista"
-        />
         {hasFridge && (
           <Nav
-            active={tab === "fridge"}
-            click={() => setTab("fridge")}
+            active={tab === "fridge" || tab === "list"}
+            click={() => selectTab("fridge")}
             icon={<Refrigerator />}
             label="Refrigerador"
           />
         )}
         <Nav
-          active={tab === "shopping"}
-          click={() => setTab("shopping")}
-          icon={<ReceiptText />}
-          label="Compras"
+          active={tab === "roomies"}
+          click={() => selectTab("roomies")}
+          icon={<House />}
+          label="Roomies"
+          badge={roomiesAttention}
         />
         {showGlobalExpenseButton && (
           <button
@@ -335,18 +392,20 @@ function Nav({
   click,
   icon,
   label,
+  badge = 0,
 }: {
   active: boolean;
   click: () => void;
   icon: React.ReactNode;
   label: string;
+  badge?: number;
 }) {
   return (
     <button
       onClick={click}
       className={`flex min-h-20 flex-1 flex-col items-center justify-center gap-1 pt-4 text-[12px] font-semibold transition-colors duration-150 ${active ? "text-[#176b46]" : "text-[#718078]"}`}
     >
-      {icon}
+      <span className="relative">{icon}{badge > 0 && <span className="absolute -right-2 -top-2 grid min-h-4 min-w-4 place-items-center rounded-full bg-[#176b46] px-1 text-[9px] font-bold leading-none text-white">{Math.min(badge, 9)}{badge > 9 ? "+" : ""}</span>}</span>
       {label}
     </button>
   );
@@ -361,6 +420,7 @@ function Finances({
   currency,
   theme,
   preferencesChanged,
+  openPurchases,
 }: {
   data: AppData;
   reload: () => Promise<void>;
@@ -370,6 +430,7 @@ function Finances({
   currency: Currency;
   theme: "light" | "dark";
   preferencesChanged: (user: User) => void;
+  openPurchases: () => void;
 }) {
   const today = new Date();
   const month = data.expenses.filter((e) => {
@@ -383,6 +444,7 @@ function Finances({
   const week = month
     .filter((e) => Date.now() - new Date(e.date).getTime() < 604800000)
     .reduce((n, e) => n + e.amount, 0);
+  const recentPurchases = buildPurchaseHistory(data).slice(0, 3);
   return (
     <>
       <header className="flex items-center px-5 pb-5 pt-[max(2rem,env(safe-area-inset-top))]">
@@ -437,6 +499,26 @@ function Finances({
           total={total}
           currency={currency}
         />
+        <section className="min-w-0">
+          <div className="mb-3 flex items-end justify-between gap-3 px-1">
+            <div><p className="text-xs font-bold uppercase tracking-[.15em] text-[#718078]">Historial</p><h2 className="mt-1 text-xl font-bold">Compras recientes</h2></div>
+            <button type="button" onClick={openPurchases} className="min-h-10 shrink-0 rounded-xl px-2 text-sm font-bold text-[#176b46]">Ver todas</button>
+          </div>
+          <div className="theme-card overflow-hidden rounded-[22px] border border-black/[.06] bg-white shadow-sm">
+            {recentPurchases.length ? recentPurchases.map((item) => (
+              <button key={item.id} type="button" onClick={openPurchases} className="flex min-h-[68px] w-full min-w-0 items-center gap-3 border-b border-black/[.06] px-4 py-3 text-left last:border-0">
+                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#e3f2e9] text-xl">{categoryEmoji(item.category)}</span>
+                <span className="min-w-0 flex-1"><b className="block truncate text-sm">{item.title}</b><small className="mt-0.5 block text-xs text-[#718078]">{new Date(item.date).toLocaleDateString("es-CL", { day: "numeric", month: "short" }).replace(".", "")}</small></span>
+                <span className="shrink-0 text-right"><b className="block whitespace-nowrap text-sm">{formatCurrency(item.amount, currency)}</b><ChevronRight className="ml-auto mt-1 text-[#91a098]" size={16}/></span>
+              </button>
+            )) : (
+              <button type="button" onClick={openPurchases} className="flex min-h-20 w-full items-center gap-3 px-4 text-left">
+                <span className="grid h-10 w-10 place-items-center rounded-xl bg-[#e3f2e9] text-[#176b46]"><ReceiptText size={20}/></span>
+                <span className="min-w-0 flex-1"><b className="block text-sm">Aún no tienes compras</b><small className="text-xs text-[#718078]">Aquí aparecerán tus movimientos recientes.</small></span><ChevronRight className="text-[#91a098]" size={20}/>
+              </button>
+            )}
+          </div>
+        </section>
       </div>
     </>
   );

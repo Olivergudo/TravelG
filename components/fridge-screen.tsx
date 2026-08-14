@@ -5,6 +5,8 @@ import {
   Clipboard,
   FileText,
   Heart,
+  ChevronRight,
+  ListChecks,
   LoaderCircle,
   PackageOpen,
   Pencil,
@@ -40,12 +42,14 @@ export function FridgeScreen({
   update,
   canScanProducts,
   canCook,
+  openShoppingList,
 }: {
   userId: string;
   data: AppData;
   update: Update;
   canScanProducts: boolean;
   canCook: boolean;
+  openShoppingList: () => void;
 }) {
   const [items, setItems] = useState<FridgeItem[]>(() =>
     fridgeRepository.local(userId),
@@ -249,6 +253,7 @@ export function FridgeScreen({
   const visibleItems = items
     .filter((item) => inventoryFilter === "all" || getFoodFilterCategory(item.name) === inventoryFilter)
     .filter((item) => item.name.toLocaleLowerCase("es-CL").includes(inventorySearch.trim().toLocaleLowerCase("es-CL")));
+  const pendingShoppingItems = data.shoppingListItems.filter((item) => !item.completed).length;
   return (
     <>
       <header className={`${inventorySearchFocused ? "max-sm:hidden" : ""} px-5 pb-5 pt-[max(2rem,env(safe-area-inset-top))]`}>
@@ -327,6 +332,16 @@ export function FridgeScreen({
           </button>
           )}
         </div>}
+        <button
+          type="button"
+          onClick={openShoppingList}
+          className={`${inventorySearchFocused ? "max-sm:hidden" : ""} theme-card flex min-h-16 w-full min-w-0 items-center gap-3 rounded-[20px] border border-black/[.06] bg-white px-4 text-left shadow-sm`}
+        >
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#e3f2e9] text-[#176b46]"><ListChecks size={20}/></span>
+          <span className="min-w-0 flex-1"><b className="block truncate text-[15px]">Lista de compras</b><small className="block text-[13px] text-[#718078]">{pendingShoppingItems === 0 ? "Sin pendientes" : `${pendingShoppingItems} ${pendingShoppingItems === 1 ? "pendiente" : "pendientes"}`}</small></span>
+          {pendingShoppingItems > 0 && <span className="h-2 w-2 shrink-0 rounded-full bg-[#4fc187]" aria-hidden="true"/>}
+          <ChevronRight className="shrink-0 text-[#91a098]" size={20}/>
+        </button>
         {error && (
           <p
             role="alert"

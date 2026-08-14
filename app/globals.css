@@ -201,6 +201,9 @@ input:focus-visible {
 .theme-root[data-theme="dark"] [class~="bg-[#e6f3ec]"] {
   background-color: #173c2b !important;
 }
+.theme-root[data-theme="dark"] [class~="bg-[#e3f2e9]"] {
+  background-color: #163426 !important;
+}
 .theme-root[data-theme="dark"] [class~="bg-[#edf2ee]"] {
   background-color: #1a231e !important;
   color: #dce8e0 !important;
@@ -234,6 +237,9 @@ input:focus-visible {
 }
 .theme-root[data-theme="dark"] [class~="border-[#176b46]/20"] {
   border-color: rgba(98, 209, 150, 0.24) !important;
+}
+.theme-root[data-theme="dark"] [class~="border-[#176b46]/15"] {
+  border-color: rgba(98, 209, 150, 0.18) !important;
 }
 .theme-root[data-theme="dark"] [class~="text-[#17231d]"] {
   color: #f3f7f4 !important;

@@ -33,7 +33,7 @@ export function buildPurchaseHistory(data: AppData): PurchaseHistoryItem[] {
   return [...expenses, ...purchases].sort((a, b) => b.date.localeCompare(a.date));
 }
 
-export function ShoppingV2({ data, update, currency }: { data: AppData; update: Update; showFinances: () => void; currency: Currency }) {
+export function ShoppingV2({ data, update, currency, showFinances }: { data: AppData; update: Update; showFinances: () => void; currency: Currency }) {
   const [selected, setSelected] = useState<PurchaseHistoryItem>();
   const [actions, setActions] = useState<PurchaseHistoryItem>();
   const [deleting, setDeleting] = useState<PurchaseHistoryItem>();
@@ -45,7 +45,7 @@ export function ShoppingV2({ data, update, currency }: { data: AppData; update: 
     setDeleting(undefined); setSelected(undefined);
   };
   return <>
-    <PurchaseHistory data={data} currency={currency} open={setSelected} actions={setActions}/>
+    <PurchaseHistory data={data} currency={currency} open={setSelected} actions={setActions} showFinances={showFinances}/>
     {selected && <HistoryDetail item={selected} currency={currency} close={() => setSelected(undefined)}/>}
     {actions && <HistoryActions item={actions} close={() => setActions(undefined)} edit={() => { if (actions.expense) setEditing(actions.expense); setActions(undefined); }} remove={() => { setDeleting(actions); setActions(undefined); }}/>}
     {deleting && <DeleteDialog item={deleting} cancel={() => setDeleting(undefined)} confirm={() => remove(deleting)}/>}
@@ -54,13 +54,13 @@ export function ShoppingV2({ data, update, currency }: { data: AppData; update: 
   </>;
 }
 
-function PurchaseHistory({ data, currency, open, actions }: { data: AppData; currency: Currency; open: (item: PurchaseHistoryItem) => void; actions: (item: PurchaseHistoryItem) => void }) {
+function PurchaseHistory({ data, currency, open, actions, showFinances }: { data: AppData; currency: Currency; open: (item: PurchaseHistoryItem) => void; actions: (item: PurchaseHistoryItem) => void; showFinances: () => void }) {
   const [query, setQuery] = useState(""); const [categoryId, setCategoryId] = useState("all"); const [filterOpen, setFilterOpen] = useState(false);
   const history = useMemo(() => buildPurchaseHistory(data), [data]);
   const categories = useMemo(() => data.categories.filter((c) => history.some((i) => i.category?.id === c.id)), [data.categories, history]);
   const visible = useMemo(() => { const search = query.trim().toLocaleLowerCase("es-CL"); return history.filter((item) => (categoryId === "all" || item.category?.id === categoryId) && (!search || [item.title, item.description || "", item.category?.name || "", item.purchase?.supermarketName || "", ...item.products.flatMap((p) => [p.productName, p.rawProductName || ""])].some((v) => v.toLocaleLowerCase("es-CL").includes(search)))); }, [categoryId, history, query]);
   const groups = useMemo(() => { const map = new Map<string, PurchaseHistoryItem[]>(); visible.forEach((item) => map.set(monthKey(item.date), [...(map.get(monthKey(item.date)) || []), item])); return [...map.entries()]; }, [visible]);
-  return <><header className="px-5 pb-5 pt-[max(2rem,env(safe-area-inset-top))]"><p className="text-[13px] font-bold uppercase tracking-[.18em] text-[#6f8278]">Historial</p><h1 className="mt-1 text-[30px] font-bold">Compras</h1></header>
+  return <><header className="flex items-center gap-3 px-5 pb-5 pt-[max(2rem,env(safe-area-inset-top))]"><button type="button" onClick={showFinances} aria-label="Volver a Finanzas" className="theme-card grid h-11 w-11 shrink-0 place-items-center rounded-full border border-black/[.06] bg-white"><ChevronLeft size={21}/></button><div><p className="text-[13px] font-bold uppercase tracking-[.18em] text-[#6f8278]">Historial</p><h1 className="mt-1 text-[30px] font-bold">Compras</h1></div></header>
     <main className="space-y-7 px-4 pb-28"><div className="flex min-w-0 gap-2"><label className="theme-card flex min-h-14 min-w-0 flex-1 items-center gap-3 rounded-2xl border border-black/[.04] bg-white px-4"><Search className="shrink-0 text-[#718078]" size={19}/><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar compras..." className="min-w-0 flex-1 bg-transparent outline-none"/></label><button onClick={() => setFilterOpen(true)} aria-label="Filtrar historial" className={`grid h-14 w-14 shrink-0 place-items-center rounded-2xl border text-xl font-bold ${categoryId === "all" ? "theme-card border-black/[.04] bg-white" : "border-[#4fc187] bg-[#173c2b] text-[#62d196]"}`}>•••</button></div>
       {!history.length && <Empty title="Aún no tienes compras registradas."/>}{history.length > 0 && !groups.length && <Empty title="No encontramos movimientos con esos filtros."/>}
       {groups.map(([month, items]) => <section key={month}><h2 className="mb-3 px-1 text-sm font-bold uppercase tracking-[.14em] text-[#718078]">{month}</h2><div className="theme-card overflow-hidden rounded-[26px] border border-black/[.04] bg-white">{items.map((item) => <HistoryRow key={item.id} item={item} currency={currency} open={() => open(item)} actions={() => actions(item)}/>)}</div></section>)}
