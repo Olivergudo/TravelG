@@ -9,10 +9,12 @@ type AccessMode = "signup" | "login";
 
 export function EmailAccessScreen() {
   const [mode, setMode] = useState<AccessMode>("signup");
+  const [forgotPassword, setForgotPassword] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
+  const [recoverySent, setRecoverySent] = useState(false);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -34,6 +36,27 @@ export function EmailAccessScreen() {
     }
   }
 
+  async function requestRecovery(event: FormEvent) {
+    event.preventDefault();
+    if (!supabase || !email.trim()) return;
+    setSending(true);
+    setError("");
+    const { error: recoveryError } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+      redirectTo: `${window.location.origin}/?recovery=1`,
+    });
+    setSending(false);
+    if (recoveryError) {
+      setError(recoveryError.message);
+      return;
+    }
+    setRecoverySent(true);
+  }
+
+  if (forgotPassword) return <AccessCard title="Recupera tu contraseña" description="Te enviaremos un enlace seguro para crear una contraseña nueva.">
+    {recoverySent ? <div className="mt-6 rounded-2xl bg-[#e5f3ea] p-4 text-sm"><b className="text-[#176b46]">Revisa tu correo</b><p className="mt-2">Enviamos el enlace de recuperación a <b>{email}</b>.</p></div> : <form onSubmit={requestRecovery} className="mt-6 space-y-3"><label htmlFor="recovery-email" className="block text-sm font-bold">Correo electrónico</label><input id="recovery-email" type="email" required autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="tu@correo.com" className="theme-card min-h-14 w-full rounded-2xl border border-black/10 bg-white px-4 outline-none"/>{error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}<button disabled={sending} className="flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-[#176b46] px-4 font-bold text-white disabled:opacity-60">{sending ? <LoaderCircle className="animate-spin" size={20}/> : <LockKeyhole size={20}/>} {sending ? "Enviando…" : "Enviar enlace de recuperación"}</button></form>}
+    <button onClick={() => { setForgotPassword(false); setRecoverySent(false); setError(""); }} className="mt-3 min-h-12 w-full text-sm font-bold text-[#176b46]">Volver a iniciar sesión</button>
+  </AccessCard>;
+
   return (
     <AccessCard title="Tus finanzas, siempre contigo" description="Crea una cuenta o inicia sesión para abrir tus datos en cualquier dispositivo.">
       {mode === "signup" && <IosPwaInstallGuide />}
@@ -42,10 +65,39 @@ export function EmailAccessScreen() {
         <Credentials email={email} password={password} setEmail={setEmail} setPassword={setPassword} />
         {error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{friendlyError(error)}</p>}
         <button disabled={sending || password.length < 8} className="flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-[#176b46] px-4 font-bold text-white disabled:opacity-60">{sending ? <LoaderCircle className="animate-spin" size={20}/> : <LockKeyhole size={20}/>} {sending ? "Procesando…" : mode === "signup" ? "Crear cuenta" : "Iniciar sesión"}</button>
+        {mode === "login" && <button type="button" onClick={() => { setForgotPassword(true); setError(""); }} className="min-h-11 w-full text-sm font-bold text-[#176b46]">Olvidé mi contraseña</button>}
       </form>
       <p className="mt-5 text-center text-xs text-[#718078]">La sesión quedará guardada en este dispositivo.</p>
     </AccessCard>
   );
+}
+
+export function UpdatePasswordScreen({ completed }: { completed: () => void }) {
+  const [password, setPassword] = useState("");
+  const [confirmation, setConfirmation] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  async function updatePassword(event: FormEvent) {
+    event.preventDefault();
+    if (!supabase || password.length < 8) return;
+    if (password !== confirmation) {
+      setError("Las contraseñas no coinciden.");
+      return;
+    }
+    setSaving(true);
+    setError("");
+    const { error: updateError } = await supabase.auth.updateUser({ password });
+    setSaving(false);
+    if (updateError) {
+      setError(updateError.message);
+      return;
+    }
+    window.history.replaceState({}, "", window.location.pathname);
+    completed();
+  }
+
+  return <AccessCard title="Crea una contraseña nueva" description="Elige una contraseña de al menos 8 caracteres para recuperar tu cuenta."><form onSubmit={updatePassword} className="mt-6 space-y-3"><label htmlFor="new-password" className="block text-sm font-bold">Nueva contraseña</label><input id="new-password" type="password" required minLength={8} autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} className="theme-card min-h-14 w-full rounded-2xl border border-black/10 bg-white px-4 outline-none"/><label htmlFor="confirm-password" className="block text-sm font-bold">Repite la contraseña</label><input id="confirm-password" type="password" required minLength={8} autoComplete="new-password" value={confirmation} onChange={(event) => setConfirmation(event.target.value)} className="theme-card min-h-14 w-full rounded-2xl border border-black/10 bg-white px-4 outline-none"/>{error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}<button disabled={saving || password.length < 8 || confirmation.length < 8} className="flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-[#176b46] px-4 font-bold text-white disabled:opacity-60">{saving ? <LoaderCircle className="animate-spin" size={20}/> : <LockKeyhole size={20}/>} {saving ? "Guardando…" : "Guardar contraseña"}</button></form></AccessCard>;
 }
 
 export function AnonymousLinkScreen() {

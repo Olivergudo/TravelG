@@ -18,7 +18,7 @@ import { deleteExpense, saveExpense } from "@/lib/expense-sync";
 import { FinanceCharts, FinanceHeroDonut } from "./finance-charts";
 import { getCategoryColor, getCategorySoftColor } from "@/lib/category-colors";
 import { AccountAccess } from "./account-access";
-import { AnonymousLinkScreen, EmailAccessScreen } from "./email-access-screen";
+import { AnonymousLinkScreen, EmailAccessScreen, UpdatePasswordScreen } from "./email-access-screen";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
 type Update = (fn: (data: AppData) => AppData) => void;
 
@@ -26,6 +26,7 @@ export function AppShell() {
   const { data, update, ready, reload } = useAppData();
   const [authReady, setAuthReady] = useState(!isSupabaseConfigured);
   const [authUser, setAuthUser] = useState<User | null>(null);
+  const [recoveringPassword, setRecoveringPassword] = useState(false);
   const [tab, setTab] = useState<"finances" | "list" | "shopping">("finances");
   const [theme, setTheme] = useState<"light" | "dark">("light");
   const [addingExpense, setAddingExpense] = useState(false);
@@ -34,15 +35,22 @@ export function AppShell() {
   const [savedFeedback, setSavedFeedback] = useState(false);
   useEffect(() => {
     if (!supabase) return;
+    const recoveryTimer = new URLSearchParams(window.location.search).get("recovery") === "1"
+      ? window.setTimeout(() => setRecoveringPassword(true), 0)
+      : undefined;
     supabase.auth.getSession().then(({ data: { session } }) => {
       setAuthUser(session?.user ?? null);
       setAuthReady(true);
     });
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "PASSWORD_RECOVERY") setRecoveringPassword(true);
       setAuthUser(session?.user ?? null);
       setAuthReady(true);
     });
-    return () => listener.subscription.unsubscribe();
+    return () => {
+      if (recoveryTimer !== undefined) window.clearTimeout(recoveryTimer);
+      listener.subscription.unsubscribe();
+    };
   }, []);
   useEffect(() => {
     if (authUser) reload().catch(() => undefined);
@@ -69,6 +77,7 @@ export function AppShell() {
       </main>
     );
   if (isSupabaseConfigured && !authUser) return <EmailAccessScreen />;
+  if (recoveringPassword) return <UpdatePasswordScreen completed={() => setRecoveringPassword(false)} />;
   if (authUser?.is_anonymous) return <AnonymousLinkScreen />;
   return (
     <main data-theme={theme} className="theme-root mx-auto min-h-dvh w-full min-w-0 max-w-2xl bg-[#f3f6f3] safe-bottom sm:shadow-[0_0_40px_rgba(23,61,45,.08)]">
