@@ -1,19 +1,21 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import {
   BadgeDollarSign,
+  CheckCircle2,
   Plus,
   ListChecks,
+  LoaderCircle,
   ReceiptText,
   Refrigerator,
+  UserRound,
 } from "lucide-react";
 import { ShoppingV2 } from "./shopping-v2";
 import { ShoppingList } from "./shopping-list";
 import { ReceiptScanner } from "./receipt-scanner";
 import {
   CategoryManager,
-  formatMoney,
   QuickExpenseForm,
 } from "./expense-ui";
 import { useAppData } from "@/hooks/use-app-data";
@@ -30,6 +32,8 @@ import { isSupabaseConfigured, supabase } from "@/lib/supabase";
 import { FridgeScreen } from "./fridge-screen";
 import { useUserPlan } from "@/hooks/use-user-plan";
 import { canUseFeature } from "@/lib/features/plans";
+import { formatCurrency, isCurrency, type Currency } from "@/lib/currency";
+import { requiredPreferences } from "@/lib/user-preferences";
 export function AppShell() {
   const [authReady, setAuthReady] = useState(!isSupabaseConfigured);
   const [authUser, setAuthUser] = useState<User | null>(null);
@@ -38,7 +42,8 @@ export function AppShell() {
   const [tab, setTab] = useState<"finances" | "list" | "fridge" | "shopping">(
     "finances",
   );
-  const [theme, setTheme] = useState<"light" | "dark">("light");
+  const [theme, setTheme] = useState<"light" | "dark">("dark");
+  const [currency, setCurrency] = useState<Currency>("CLP");
   const [addingExpense, setAddingExpense] = useState(false);
   const [scanningReceipt, setScanningReceipt] = useState(false);
   const [managingCategories, setManagingCategories] = useState(false);
@@ -61,6 +66,11 @@ export function AppShell() {
     entitlements && canUseFeature(entitlements, "aiRecipes"),
   );
   const showGlobalExpenseButton = tab === "finances";
+  const required = requiredPreferences(authUser?.user_metadata);
+  const displayName = required.displayName;
+  const configuredCurrency = required.currency;
+  const needsName = Boolean(authUser && !authUser.is_anonymous && required.needsName);
+  const needsCurrency = Boolean(authUser && !authUser.is_anonymous && required.needsCurrency);
   useEffect(() => {
     if (!supabase) return;
     const recoveryTimer =
@@ -84,17 +94,18 @@ export function AppShell() {
     };
   }, []);
   useEffect(() => {
-    const colorScheme = window.matchMedia("(prefers-color-scheme: dark)");
-    const syncWithDevice = (event?: MediaQueryListEvent) => {
-      setTheme((event?.matches ?? colorScheme.matches) ? "dark" : "light");
-    };
-
-    syncWithDevice();
-    colorScheme.addEventListener("change", syncWithDevice);
-    localStorage.removeItem("gasto-listo-theme");
-
-    return () => colorScheme.removeEventListener("change", syncWithDevice);
-  }, []);
+    if (!authUser) return;
+    const metadata = authUser.user_metadata;
+    const storedTheme = localStorage.getItem(`gasto-listo-theme:${authUser.id}`);
+    const nextTheme = metadata?.theme === "light" || metadata?.theme === "dark"
+      ? metadata.theme
+      : storedTheme === "light" || storedTheme === "dark" ? storedTheme : "dark";
+    const nextCurrency = isCurrency(metadata?.currency) ? metadata.currency : "CLP";
+    queueMicrotask(() => {
+      setTheme(nextTheme);
+      setCurrency(nextCurrency);
+    });
+  }, [authUser]);
   useEffect(() => {
     document.documentElement.dataset.appTheme = theme;
   }, [theme]);
@@ -120,6 +131,16 @@ export function AppShell() {
           data={data}
           reload={reload}
           admin={role === "admin"}
+          displayName={displayName}
+          isPro={Boolean(entitlements && canUseFeature(entitlements, "aiRecipes"))}
+          currency={currency}
+          theme={theme}
+          preferencesChanged={(user) => {
+            const nextTheme = user.user_metadata.theme === "light" ? "light" : "dark";
+            setTheme(nextTheme);
+            if (isCurrency(user.user_metadata.currency)) setCurrency(user.user_metadata.currency);
+            setAuthUser(user);
+          }}
         />
       ) : tab === "list" ? (
         <ShoppingList data={data} update={update} />
@@ -135,6 +156,7 @@ export function AppShell() {
         <ShoppingV2
           data={data}
           update={update}
+          currency={currency}
           showFinances={() => setTab("finances")}
         />
       )}
@@ -208,6 +230,7 @@ export function AppShell() {
             setSavedFeedback(true);
             window.setTimeout(() => setSavedFeedback(false), 2200);
           }}
+          currency={currency}
         />
       )}
       {managingCategories && (
@@ -230,9 +253,83 @@ export function AppShell() {
           Gasto guardado
         </div>
       )}
+      {(needsName || needsCurrency) && authUser && (
+        <PreferencesOnboarding
+          email={authUser.email || ""}
+          displayName={displayName}
+          currency={configuredCurrency}
+          saved={(user) => {
+            setAuthUser(user);
+            if (isCurrency(user.user_metadata.currency)) setCurrency(user.user_metadata.currency);
+          }}
+        />
+      )}
     </main>
   );
 }
+
+function PreferencesOnboarding({ email, displayName, currency, saved }: { email: string; displayName: string; currency?: Currency; saved: (user: User) => void }) {
+  const needsName = !displayName;
+  const needsCurrency = !currency;
+  const [step, setStep] = useState<"name" | "currency">(needsName ? "name" : "currency");
+  const [name, setName] = useState(displayName);
+  const [selectedCurrency, setSelectedCurrency] = useState<Currency | undefined>(currency);
+  const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
+  const [error, setError] = useState("");
+  const persist = async () => {
+    const clean = name.trim().replace(/\s+/g, " ");
+    if (!supabase || (needsName && clean.length < 2) || !selectedCurrency || savingRef.current) return;
+    savingRef.current = true;
+    setSaving(true);
+    setError("");
+    const { data, error: updateError } = await supabase.auth.updateUser({
+      data: {
+        ...(needsName ? { full_name: clean, name: clean } : {}),
+        currency: selectedCurrency,
+        needs_name: false,
+      },
+    });
+    setSaving(false);
+    if (updateError || !data.user) {
+      savingRef.current = false;
+      setError("No pudimos guardar tus preferencias. Intenta nuevamente.");
+      return;
+    }
+    savingRef.current = false;
+    saved(data.user);
+  };
+  const totalSteps = needsName && needsCurrency ? 2 : 1;
+  const currentStep = totalSteps === 2 && step === "currency" ? 2 : 1;
+  return (
+    <div className="fixed inset-0 z-[120] grid place-items-center bg-black/55 p-5">
+      <section className="theme-card w-full max-w-sm rounded-[30px] bg-white p-6 text-center shadow-2xl">
+        <div className="mx-auto grid h-16 w-16 place-items-center rounded-[22px] bg-[#e5f3ea] text-[#176b46]">
+          <UserRound size={31}/>
+        </div>
+        <p className="mt-5 text-xs font-bold uppercase tracking-[.16em] text-[#718078]">Paso {currentStep} de {totalSteps}</p>
+        {step === "name" ? <>
+          <h2 className="mt-2 text-3xl font-bold tracking-[-.03em]">¿Cómo te llamas?</h2>
+          <p className="mt-2 text-sm text-[#587067]">Usaremos tu nombre para personalizar tu experiencia.</p>
+          <label htmlFor="welcome-name" className="mt-6 block text-left text-sm font-bold">Tu nombre</label>
+          <input id="welcome-name" autoFocus required minLength={2} maxLength={50} autoComplete="name" value={name} onChange={(event) => setName(event.target.value)} placeholder="Ej. Oliver" className="theme-card mt-2 min-h-14 w-full rounded-2xl border border-black/10 bg-white px-4 text-base outline-none focus:border-[#176b46]"/>
+        </> : <>
+          <h2 className="mt-2 text-2xl font-bold tracking-[-.03em]">¿Cuál es tu moneda principal?</h2>
+          <p className="mt-2 text-sm text-[#587067]">La usaremos para mostrar y registrar tus montos.</p>
+          <div className="mt-5 overflow-hidden rounded-2xl border border-black/[.06] text-left">
+            {([ ["CLP", "🇨🇱", "Peso chileno"], ["MXN", "🇲🇽", "Peso mexicano"], ["USD", "🇺🇸", "Dólar estadounidense"], ["EUR", "🇪🇺", "Euro"] ] as Array<[Currency, string, string]>).map(([code, flag, label]) => <button key={code} type="button" onClick={() => setSelectedCurrency(code)} className={`flex min-h-16 w-full items-center gap-3 border-b border-black/[.06] px-4 last:border-0 ${selectedCurrency === code ? "bg-[#e6f3ec]" : ""}`}><span className="text-2xl">{flag}</span><span className="min-w-0 flex-1"><b className="block">{code}</b><small className="text-[#718078]">{label}</small></span>{selectedCurrency === code ? <CheckCircle2 className="text-[#176b46]" size={21}/> : <span className="h-5 w-5 rounded-full border border-[#91a098]"/>}</button>)}
+          </div>
+        </>}
+        {error && <p role="alert" className="mt-3 rounded-xl bg-red-50 p-3 text-left text-sm text-red-700">{error}</p>}
+        <button type="button" onClick={() => { if (step === "name" && needsCurrency) { setError(""); setStep("currency"); } else { void persist(); } }} disabled={saving || (step === "name" ? name.trim().length < 2 : !selectedCurrency)} className="mt-4 flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-[#176b46] px-4 font-bold text-white disabled:opacity-50">
+          {saving && <LoaderCircle className="animate-spin" size={20}/>} {saving ? "Guardando..." : step === "name" && needsCurrency ? "Continuar" : "Comenzar"}
+        </button>
+        {email && <p className="mt-4 truncate text-xs text-[#718078]">Cuenta: {email}</p>}
+      </section>
+    </div>
+  );
+}
+
 function Nav({
   active,
   click,
@@ -259,10 +356,20 @@ function Finances({
   data,
   reload,
   admin,
+  displayName,
+  isPro,
+  currency,
+  theme,
+  preferencesChanged,
 }: {
   data: AppData;
   reload: () => Promise<void>;
   admin: boolean;
+  displayName: string;
+  isPro: boolean;
+  currency: Currency;
+  theme: "light" | "dark";
+  preferencesChanged: (user: User) => void;
 }) {
   const today = new Date();
   const month = data.expenses.filter((e) => {
@@ -281,27 +388,38 @@ function Finances({
       <header className="flex items-center px-5 pb-5 pt-[max(2rem,env(safe-area-inset-top))]">
         <div className="flex-1">
           <p className="text-[13px] font-bold uppercase tracking-[.18em] text-[#6f8278]">
-            Tu dinero
+            {displayName ? `Hola, ${displayName.split(/\s+/)[0]}` : "Tu dinero"}
           </p>
           <h1 className="mt-1 text-[30px] font-bold leading-tight tracking-[-.02em]">
             Finanzas
           </h1>
         </div>
-        <AccountAccess
-          admin={admin}
-          onAccountChanged={() => {
-            reload().catch(() => undefined);
-          }}
-        />
+        <div className="flex items-center gap-2.5">
+          {isPro && (
+            <span className="pro-badge-shine rounded-full border border-[#c7a95b]/45 bg-[#173d2d] px-3 py-1.5 text-[11px] font-extrabold tracking-[.2em] text-[#ecd990] shadow-[0_5px_16px_rgba(23,61,45,.18)]">
+              PRO
+            </span>
+          )}
+          <AccountAccess
+            admin={admin}
+            displayName={displayName}
+            currency={currency}
+            theme={theme}
+            onPreferencesChanged={preferencesChanged}
+            onAccountChanged={() => {
+              reload().catch(() => undefined);
+            }}
+          />
+        </div>
       </header>
       <section className="mx-4 min-w-0 rounded-[24px] border border-[#4fc187]/20 bg-[#101a14] px-5 py-4 text-white shadow-[0_8px_22px_rgba(0,0,0,.08)]">
         <p className="text-xs font-medium text-white/60">Gastado este mes</p>
-        <p className="mt-1.5 truncate text-[clamp(1.75rem,8vw,2.25rem)] font-bold leading-none tracking-[-.035em]">{formatMoney(total)}</p>
+        <p className="mt-1.5 truncate text-[clamp(1.75rem,8vw,2.25rem)] font-bold leading-none tracking-[-.035em]">{formatCurrency(total, currency)}</p>
         <div className="mt-3 grid grid-cols-2 gap-3 border-t border-white/10 pt-3">
           <span className="text-xs text-white/60">
             Esta semana{" "}
             <b className="mt-0.5 block text-sm text-white">
-              {formatMoney(week)}
+              {formatCurrency(week, currency)}
             </b>
           </span>
           <span className="text-xs text-white/60">
@@ -317,6 +435,7 @@ function Finances({
           expenses={month}
           categories={data.categories}
           total={total}
+          currency={currency}
         />
       </div>
     </>

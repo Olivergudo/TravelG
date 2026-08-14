@@ -14,6 +14,7 @@ import { classifyTicketProduct, normalizeTicketProductName, type ClassificationR
 import { ticketAliasRepository } from "@/lib/food-classifier/alias-repository";
 import { fridgeRepository } from "@/lib/fridge/repository";
 import { findPossibleDuplicateProduct } from "@/lib/fridge/duplicates";
+import { formatCurrency, type Currency } from "@/lib/currency";
 type Update = (fn: (data: AppData) => AppData) => void;
 const uid = () =>
   globalThis.crypto?.randomUUID?.() ??
@@ -24,12 +25,6 @@ const normalize = (s: string) =>
     .toLocaleLowerCase("es-CL")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "");
-const money = (n = 0) =>
-  new Intl.NumberFormat("es-CL", {
-    style: "currency",
-    currency: "CLP",
-    maximumFractionDigits: 0,
-  }).format(n);
 const numeric = (s: string) => Number(s.replace(/\D/g, "")) || 0;
 type ReviewedItem = ScannedReceiptItem & {
   classifier: ClassificationResult;
@@ -43,11 +38,13 @@ export function ReceiptScanner({
   update,
   close,
   completed,
+  currency,
 }: {
   data: AppData;
   update: Update;
   close: () => void;
   completed?: () => void;
+  currency: Currency;
 }) {
   const [file, setFile] = useState<File>();
   const [preview, setPreview] = useState("");
@@ -289,10 +286,10 @@ export function ReceiptScanner({
               }
             >
               {difference
-                ? `Revisa el ticket: existe una diferencia de ${money(Math.abs(difference))}.`
+                ? `Revisa el ticket: existe una diferencia de ${formatCurrency(Math.abs(difference), currency)}.`
                 : "✓ La suma de productos coincide con el total."}
               <div className="mt-1">
-                Productos: {money(sum)} · Ticket: {money(receipt.total)}
+                Productos: {formatCurrency(sum, currency)} · Ticket: {formatCurrency(receipt.total, currency)}
               </div>
             </div>
             <div className="rounded-2xl bg-white p-4">

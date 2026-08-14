@@ -5,6 +5,10 @@
   --muted: #66776e;
   --paper: #f3f6f3;
   --brand: #176b46;
+  --app-background: #f3f6f3;
+  --app-surface: #ffffff;
+  --app-text: #17231d;
+  --app-border: rgba(0, 0, 0, 0.06);
 }
 
 * {
@@ -56,6 +60,65 @@ html[data-app-theme="dark"] body {
     opacity: 1;
   }
 }
+.finance-donut-enter {
+  transform-origin: center;
+  animation: finance-donut-in 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
+  will-change: transform, opacity;
+  contain: layout paint;
+}
+.pro-badge-shine {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+.pro-badge-shine::after {
+  position: absolute;
+  inset: -80% auto -80% -55%;
+  z-index: 1;
+  width: 32%;
+  content: "";
+  pointer-events: none;
+  background: linear-gradient(
+    105deg,
+    transparent 0%,
+    rgba(255, 247, 198, 0.08) 25%,
+    rgba(255, 247, 198, 0.75) 50%,
+    rgba(255, 247, 198, 0.08) 75%,
+    transparent 100%
+  );
+  filter: blur(1px);
+  transform: translate3d(0, 0, 0) rotate(10deg);
+  animation: pro-badge-reflection 3.4s ease-in-out infinite;
+}
+@keyframes pro-badge-reflection {
+  0%,
+  58% {
+    transform: translate3d(0, 0, 0) rotate(10deg);
+    opacity: 0;
+  }
+  64% {
+    opacity: 1;
+  }
+  82% {
+    transform: translate3d(520%, 0, 0) rotate(10deg);
+    opacity: 1;
+  }
+  88%,
+  100% {
+    transform: translate3d(520%, 0, 0) rotate(10deg);
+    opacity: 0;
+  }
+}
+@keyframes finance-donut-in {
+  from {
+    transform: translateZ(0) scale(0.94) rotate(-7deg);
+    opacity: 0;
+  }
+  to {
+    transform: translateZ(0) scale(1) rotate(0);
+    opacity: 1;
+  }
+}
 button,
 input {
   font: inherit;
@@ -99,11 +162,21 @@ input:focus-visible {
 }
 
 .theme-root {
+  --app-background: #f3f6f3;
+  --app-surface: #ffffff;
+  --app-text: #17231d;
+  --app-border: rgba(0, 0, 0, 0.06);
+  background-color: var(--app-background);
+  color: var(--app-text);
   transition:
     background-color 0.2s ease,
     color 0.2s ease;
 }
 .theme-root[data-theme="dark"] {
+  --app-background: #050806;
+  --app-surface: #101511;
+  --app-text: #f3f7f4;
+  --app-border: rgba(255, 255, 255, 0.07);
   color-scheme: dark;
   background: #050806 !important;
   color: #f3f7f4;
@@ -198,6 +271,12 @@ html[data-app-theme="dark"] .ios-install-sheet .bg-black\/10 {
 }
 @media (prefers-reduced-motion: reduce) {
   .ios-install-guide .sheet {
+    animation: none;
+  }
+  .finance-donut-enter {
+    animation: none;
+  }
+  .pro-badge-shine::after {
     animation: none;
   }
 }

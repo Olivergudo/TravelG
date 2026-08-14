@@ -80,6 +80,7 @@ export function FridgeScreen({
   const [recipeInsufficient, setRecipeInsufficient] = useState(false);
   const [error, setError] = useState("");
   const [inventorySearch, setInventorySearch] = useState("");
+  const [inventorySearchFocused, setInventorySearchFocused] = useState(false);
   const [inventoryFilter, setInventoryFilter] = useState<"all" | FoodFilterCategory>("all");
   const [filterOpen, setFilterOpen] = useState(false);
   const [pendingDuplicate, setPendingDuplicate] = useState<{ input: FridgeItemInput; existing: FridgeItem; source: "quick" | "form" } | null>(null);
@@ -249,7 +250,7 @@ export function FridgeScreen({
     .filter((item) => item.name.toLocaleLowerCase("es-CL").includes(inventorySearch.trim().toLocaleLowerCase("es-CL")));
   return (
     <>
-      <header className="px-5 pb-5 pt-[max(2rem,env(safe-area-inset-top))]">
+      <header className={`${inventorySearchFocused ? "max-sm:hidden" : ""} px-5 pb-5 pt-[max(2rem,env(safe-area-inset-top))]`}>
         <p className="text-[13px] font-bold uppercase tracking-[.18em] text-[#6f8278]">
           Inventario
         </p>
@@ -260,10 +261,10 @@ export function FridgeScreen({
           {items.length} {items.length === 1 ? "producto" : "productos"}
         </p>
       </header>
-      <div className="space-y-5 px-4 pb-32">
+      <div className={`space-y-5 px-4 pb-32 ${inventorySearchFocused ? "max-sm:pt-[max(1rem,env(safe-area-inset-top))]" : ""}`}>
         <form
           onSubmit={quickAdd}
-          className="theme-card flex min-w-0 gap-2 rounded-2xl border border-black/[.04] bg-white p-2 shadow-sm"
+          className={`${inventorySearchFocused ? "max-sm:hidden" : ""} theme-card flex min-w-0 gap-2 rounded-2xl border border-black/[.04] bg-white p-2 shadow-sm`}
         >
           <input
             ref={quickInput}
@@ -287,7 +288,7 @@ export function FridgeScreen({
             )}
           </button>
         </form>
-        {(canScanProducts || canCook) && <div className={`grid gap-3 ${canScanProducts && canCook ? "grid-cols-2" : "grid-cols-1"}`}>
+        {(canScanProducts || canCook) && <div className={`grid gap-3 ${inventorySearchFocused ? "max-sm:hidden" : ""} ${canScanProducts && canCook ? "grid-cols-2" : "grid-cols-1"}`}>
           {canScanProducts && (
           <button
             onClick={() => {
@@ -357,7 +358,7 @@ export function FridgeScreen({
             <div className="flex w-full min-w-0 gap-2">
               <label className="theme-card flex min-w-0 flex-1 items-center gap-2 rounded-2xl border border-black/[.04] bg-white px-3">
                 <Search className="shrink-0 text-[#718078]" size={18} />
-                <input type="search" value={inventorySearch} onChange={(event) => setInventorySearch(event.target.value)} placeholder="Buscar alimento..." aria-label="Buscar alimento" className="min-h-11 min-w-0 flex-1 bg-transparent text-base outline-none" />
+                <input type="search" value={inventorySearch} onFocus={() => { setInventorySearchFocused(true); window.setTimeout(() => window.scrollTo({ top: 0, behavior: "smooth" }), 80); }} onBlur={() => window.setTimeout(() => setInventorySearchFocused(false), 120)} onChange={(event) => setInventorySearch(event.target.value)} placeholder="Buscar alimento..." aria-label="Buscar alimento" className="min-h-11 min-w-0 flex-1 bg-transparent text-[16px] outline-none" />
               </label>
               <button type="button" onClick={() => setFilterOpen(true)} aria-label="Filtrar alimentos" className={`relative grid h-11 w-11 shrink-0 place-items-center rounded-2xl border text-xl font-bold leading-none ${inventoryFilter === "all" ? "theme-card border-black/[.06] bg-white" : "border-[#4fc187] bg-[#173c2b] text-[#62d196]"}`}>
                 ⋯

@@ -23,7 +23,11 @@ export function EmailAccessScreen() {
     setError("");
 
     const result = mode === "signup"
-      ? await supabase.auth.signUp({ email: email.trim(), password })
+      ? await supabase.auth.signUp({
+          email: email.trim(),
+          password,
+          options: { data: { needs_name: true } },
+        })
       : await supabase.auth.signInWithPassword({ email: email.trim(), password });
 
     setSending(false);
@@ -114,6 +118,7 @@ export function AnonymousLinkScreen() {
     const { data: linkData, error: linkError } = await supabase.auth.updateUser({
       email: email.trim(),
       password,
+      data: { needs_name: true },
     });
     setSending(false);
     if (linkError) {

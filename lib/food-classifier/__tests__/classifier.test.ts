@@ -10,6 +10,8 @@ import { recipeAsText, recipePdf } from "../../recipes/share";
 import { buildPurchaseHistory, cleanStoreName } from "../../../components/shopping-v2";
 import type { AppData } from "../../types";
 import { userDataCacheKey } from "../../repository";
+import { formatCurrency } from "../../currency";
+import { requiredPreferences } from "../../user-preferences";
 
 const food = ["Papa", "PAPA KG", "Cebolla", "CEBOLLA 1KG", "Tomate", "Jitomate", "Palta", "Aguacate", "Poroto", "Frijol", "Choclo", "Elote", "Leche", "LECHE ENT 1L", "Huevos 12U", "Pollo", "Vacuno", "Carne molida", "Salmón", "Merluza", "Pan", "Tortilla", "Arroz", "Pasta", "Mostaza", "Mayonesa", "Café", "Agua mineral", "Chocolate", "Coca Cola"];
 const nonFood = ["Shampoo", "Dove Shampoo", "Detergente", "Papel higiénico", "PAP HIG 12R", "PAPEL HIG 12R", "Jabón", "Desodorante", "Pasta dental", "Cloro", "Suavizante", "Bolsa basura", "Comida perro", "Whiskas", "PANTENE SHAMPOO"];
@@ -126,4 +128,18 @@ test("unifica una compra vinculada sin duplicarla y limpia el nombre visible", (
 test("separa el caché principal por usuario", () => {
   assert.notEqual(userDataCacheKey("usuario-a"), userDataCacheKey("usuario-b"));
   assert.match(userDataCacheKey("usuario-a"), /usuario-a$/);
+});
+
+test("formatea la moneda sin convertir el importe", () => {
+  assert.match(formatCurrency(13910, "CLP"), /13\.910/);
+  assert.match(formatCurrency(13910, "USD"), /13,910/);
+  assert.match(formatCurrency(13910, "EUR"), /13\.910/);
+});
+
+test("el onboarding solicita únicamente las preferencias faltantes", () => {
+  assert.deepEqual(requiredPreferences({ full_name: "Oliver", currency: "CLP" }), { displayName: "Oliver", currency: "CLP", needsName: false, needsCurrency: false });
+  assert.equal(requiredPreferences({ full_name: "Oliver" }).needsCurrency, true);
+  assert.equal(requiredPreferences({ currency: "MXN" }).needsName, true);
+  assert.deepEqual(requiredPreferences({}).needsName, true);
+  assert.deepEqual(requiredPreferences({}).needsCurrency, true);
 });

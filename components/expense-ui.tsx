@@ -3,17 +3,13 @@ import { useRef, useState } from "react";
 import { Camera, GripVertical, Trash2, X } from "lucide-react";
 import type { Category, Expense } from "@/lib/types";
 import { categoryPalette, getCategoryBorderColor, getCategoryColor, getCategorySoftColor } from "@/lib/category-colors";
+import { formatCurrency } from "@/lib/currency";
 
 const uid = () =>
   globalThis.crypto?.randomUUID?.() ??
   `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 const parseAmount = (value: string) => Number(value.replace(/\D/g, "")) || 0;
-export const formatMoney = (value = 0) =>
-  new Intl.NumberFormat("es-CL", {
-    style: "currency",
-    currency: "CLP",
-    maximumFractionDigits: 0,
-  }).format(value);
+export const formatMoney = formatCurrency;
 
 const commonEmojis = [
   "🚗", "🚕", "🚌", "🚇", "✈️", "⛽", "🚲", "🍽️", "🍔", "🍕", "☕", "🍺",
@@ -162,7 +158,7 @@ export function QuickExpenseForm({
             enterKeyHint="next"
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
-            placeholder="$ 0"
+            placeholder="0"
             className="min-h-16 w-full rounded-2xl bg-[#f3f6f3] p-4 text-3xl font-bold outline-none focus:ring-2 focus:ring-[#176b46]"
           />
         </label>
