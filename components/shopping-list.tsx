@@ -53,7 +53,7 @@ export function ShoppingList({ data, update }: { data: AppData; update: Update }
       {pending.length > 0 && <ItemGroup title="Pendientes">{pending.map((item) => <SwipeItem key={item.id} item={item} toggle={() => toggle(item.id)} remove={() => remove(item.id)}/>)}</ItemGroup>}
       {completed.length > 0 && <section>
         <div className="mb-2 flex min-h-9 items-center px-1"><h2 className="flex-1 text-xs font-bold uppercase tracking-[.14em] text-[#718078]">Completados</h2><button onClick={clearCompleted} className="min-h-9 px-2 text-xs font-semibold text-[#176b46]">Limpiar completados</button></div>
-        <div className="theme-card overflow-hidden rounded-[24px] border border-black/[.04] bg-white">{completed.map((item) => <SwipeItem key={item.id} item={item} toggle={() => toggle(item.id)} remove={() => remove(item.id)}/>)}</div>
+        <div className="space-y-3">{completed.map((item) => <SwipeItem key={item.id} item={item} toggle={() => toggle(item.id)} remove={() => remove(item.id)}/>)}</div>
       </section>}
       {data.shoppingListItems.length > 0 && <p className="text-center text-xs text-[#718078]">Toca para marcar · Desliza para eliminar</p>}
     </div>
@@ -61,7 +61,7 @@ export function ShoppingList({ data, update }: { data: AppData; update: Update }
 }
 
 function ItemGroup({ title, children }: { title: string; children: React.ReactNode }) {
-  return <section><h2 className="mb-2 px-1 text-xs font-bold uppercase tracking-[.14em] text-[#718078]">{title}</h2><div className="theme-card overflow-hidden rounded-[24px] border border-black/[.04] bg-white">{children}</div></section>;
+  return <section><h2 className="mb-2 px-1 text-xs font-bold uppercase tracking-[.14em] text-[#718078]">{title}</h2><div className="space-y-3">{children}</div></section>;
 }
 
 function SwipeItem({ item, toggle, remove }: { item: ShoppingListItem; toggle: () => void; remove: () => void }) {
@@ -79,9 +79,9 @@ function SwipeItem({ item, toggle, remove }: { item: ShoppingListItem; toggle: (
     if (offset >= 130) { remove(); setOffset(0); return; }
     setOffset(offset >= 55 ? 76 : 0);
   };
-  return <div className="relative overflow-hidden border-b border-black/5 bg-red-600 last:border-0">
+  return <div className={`theme-card relative overflow-hidden rounded-2xl border border-black/[.04] ${offset > 0 ? "bg-red-600" : "bg-white"}`}>
     <button onClick={remove} aria-label={`Eliminar ${item.name}`} className="absolute inset-y-0 left-0 flex w-[76px] items-center justify-center text-white"><Trash2 size={19}/></button>
-    <div onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={() => setOffset(0)} style={{ transform: `translateX(${offset}px)` }} className="relative flex min-h-[58px] touch-pan-y items-center bg-white transition-transform duration-150">
+    <div onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={() => setOffset(0)} style={{ transform: `translateX(${offset}px)` }} className="relative flex min-h-[58px] touch-pan-y items-center rounded-2xl bg-white transition-transform duration-150">
       <button onClick={() => { if (!dragged.current) toggle(); }} className={`flex min-h-[58px] min-w-0 flex-1 items-center gap-3 px-4 text-left ${item.completed ? "opacity-55" : ""}`}>
         {item.completed ? <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-[#176b46] text-white"><Check size={15}/></span> : <Circle className="shrink-0 text-[#a5b2ab]" size={24}/>}<span className={`min-w-0 flex-1 truncate font-semibold ${item.completed ? "line-through" : ""}`}>{item.name}</span>
       </button>
