@@ -227,6 +227,17 @@ class SupabaseRepository implements DataRepository {
     if (data) {
       const remote = migrate(data);
       const local = await this.local.load();
+      const hasContent = (value: AppData) =>
+        value.expenses.length > 0 ||
+        value.shoppingListItems.length > 0 ||
+        value.purchases.length > 0;
+
+      // Safari y una PWA instalada pueden tener almacenamientos separados.
+      // Si Safari creó una cuenta vacía, recupera y sube los datos de la PWA.
+      if (hasContent(local) && !hasContent(remote)) {
+        await this.write(local);
+        return local;
+      }
       const localCompleted = new Map(
         local.shoppingListItems.map((item) => [item.id, item.completed]),
       );
