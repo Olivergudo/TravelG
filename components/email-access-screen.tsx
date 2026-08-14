@@ -3,6 +3,7 @@
 import { FormEvent, useState } from "react";
 import { LoaderCircle, LockKeyhole, WalletCards } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { IosPwaInstallGuide } from "./ios-pwa-install-guide";
 
 type AccessMode = "signup" | "login";
 
@@ -35,6 +36,7 @@ export function EmailAccessScreen() {
 
   return (
     <AccessCard title="Tus finanzas, siempre contigo" description="Crea una cuenta o inicia sesión para abrir tus datos en cualquier dispositivo.">
+      {mode === "signup" && <IosPwaInstallGuide />}
       <ModeTabs mode={mode} setMode={(next) => { setMode(next); setError(""); }} />
       <form onSubmit={submit} className="mt-5 space-y-3">
         <Credentials email={email} password={password} setEmail={setEmail} setPassword={setPassword} />

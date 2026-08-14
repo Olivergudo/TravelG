@@ -80,3 +80,18 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--brand); out
 .theme-root[data-theme="dark"] [class~="text-[#809087]"] { color: #9baca2 !important; }
 .theme-root[data-theme="dark"] nav { background: rgba(10,13,11,.94) !important; border-color: rgba(255,255,255,.07) !important; }
 .theme-root[data-theme="dark"] .bottom-nav button[aria-label="Nuevo gasto"] { border-color: #050806 !important; }
+
+html[data-app-theme="dark"] .ios-install-sheet {
+  color-scheme: dark;
+  background: #101511;
+  color: #f3f7f4;
+}
+html[data-app-theme="dark"] .ios-install-sheet .ios-install-step { background: #17201b; }
+html[data-app-theme="dark"] .ios-install-sheet button[aria-label="Cerrar tutorial de instalación"] {
+  background: #17201b;
+  color: #9baca2;
+}
+html[data-app-theme="dark"] .ios-install-sheet .bg-black\/10 { background: rgba(255,255,255,.14); }
+@media (prefers-reduced-motion: reduce) {
+  .ios-install-guide .sheet { animation: none; }
+}
