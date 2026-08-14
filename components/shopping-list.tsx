@@ -56,7 +56,15 @@ export function ShoppingList({ data, update }: { data: AppData; update: Update }
         <input ref={input} value={name} onChange={(event) => setName(event.target.value)} enterKeyHint="done" placeholder="Agregar producto…" aria-label="Nombre del producto" className="min-h-12 min-w-0 flex-1 bg-transparent px-3 outline-none" />
         <button type="submit" aria-label="Agregar producto" className="tap grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-[#176b46] text-white"><Plus size={23}/></button>
       </form>
-      {!data.shoppingListItems.length && <div className="px-2 py-3 text-center"><ListChecks className="mx-auto mb-2 text-[#91a098]"/><p className="text-sm text-[#718078]">Todavía no tienes productos pendientes.</p></div>}
+      {!data.shoppingListItems.length && (
+        <section className="theme-card rounded-[28px] border border-black/[.04] bg-white px-6 py-10 text-center">
+          <ListChecks className="mx-auto text-[#91a098]" size={38}/>
+          <h2 className="mt-4 text-xl font-bold">Tu lista está vacía</h2>
+          <p className="mt-2 text-sm text-[#718078]">
+            Agrega productos para recordar lo que necesitas comprar.
+          </p>
+        </section>
+      )}
       {pending.length > 0 && <ItemGroup title="Pendientes">{pending.map((item) => <SwipeItem key={item.id} item={item} toggle={() => toggle(item.id)} edit={() => setEditingItem(item)} remove={() => remove(item.id)}/>)}</ItemGroup>}
       {completed.length > 0 && <section>
         <div className="mb-2 flex min-h-9 items-center px-1"><h2 className="flex-1 text-xs font-bold uppercase tracking-[.14em] text-[#718078]">Completados</h2><button onClick={clearCompleted} className="min-h-9 px-2 text-xs font-semibold text-[#176b46]">Limpiar completados</button></div>
