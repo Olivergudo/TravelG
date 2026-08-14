@@ -3,36 +3,39 @@ import { useEffect, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import {
   BadgeDollarSign,
-  MoreHorizontal,
   Plus,
   ListChecks,
   ReceiptText,
+  Refrigerator,
 } from "lucide-react";
 import { ShoppingV2 } from "./shopping-v2";
 import { ShoppingList } from "./shopping-list";
 import { ReceiptScanner } from "./receipt-scanner";
 import { categoryEmoji, CategoryManager, formatMoney, QuickExpenseForm } from "./expense-ui";
 import { useAppData } from "@/hooks/use-app-data";
-import type { AppData, Expense } from "@/lib/types";
-import { deleteExpense, saveExpense } from "@/lib/expense-sync";
+import type { AppData } from "@/lib/types";
+import { saveExpense } from "@/lib/expense-sync";
 import { FinanceCharts, FinanceHeroDonut } from "./finance-charts";
 import { getCategoryColor, getCategorySoftColor } from "@/lib/category-colors";
 import { AccountAccess } from "./account-access";
 import { AnonymousLinkScreen, EmailAccessScreen, UpdatePasswordScreen } from "./email-access-screen";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
-type Update = (fn: (data: AppData) => AppData) => void;
-
+import { FridgeScreen } from "./fridge-screen";
+import { useUserPlan } from "@/hooks/use-user-plan";
+import { canUseFeature } from "@/lib/features/plans";
 export function AppShell() {
   const { data, update, ready, reload } = useAppData();
   const [authReady, setAuthReady] = useState(!isSupabaseConfigured);
   const [authUser, setAuthUser] = useState<User | null>(null);
   const [recoveringPassword, setRecoveringPassword] = useState(false);
-  const [tab, setTab] = useState<"finances" | "list" | "shopping">("finances");
+  const [tab, setTab] = useState<"finances" | "list" | "fridge" | "shopping">("finances");
   const [theme, setTheme] = useState<"light" | "dark">("light");
   const [addingExpense, setAddingExpense] = useState(false);
   const [scanningReceipt, setScanningReceipt] = useState(false);
   const [managingCategories, setManagingCategories] = useState(false);
   const [savedFeedback, setSavedFeedback] = useState(false);
+  const { user: entitlements, ready: planReady } = useUserPlan(authUser?.id);
+  const hasFridge = Boolean(entitlements && canUseFeature(entitlements, "fridge"));
   useEffect(() => {
     if (!supabase) return;
     const recoveryTimer = new URLSearchParams(window.location.search).get("recovery") === "1"
@@ -70,7 +73,7 @@ export function AppShell() {
   useEffect(() => {
     document.documentElement.dataset.appTheme = theme;
   }, [theme]);
-  if (!authReady || (authUser && !ready))
+  if (!authReady || (authUser && (!ready || !planReady)))
     return (
       <main className="grid min-h-screen place-items-center text-[#708078]">
         Cargando…
@@ -82,9 +85,11 @@ export function AppShell() {
   return (
     <main data-theme={theme} className="theme-root mx-auto min-h-dvh w-full min-w-0 max-w-2xl bg-[#f3f6f3] safe-bottom sm:shadow-[0_0_40px_rgba(23,61,45,.08)]">
       {tab === "finances" ? (
-        <Finances data={data} update={update} dark={theme === "dark"} reload={reload} />
+        <Finances data={data} dark={theme === "dark"} reload={reload} />
       ) : tab === "list" ? (
         <ShoppingList data={data} update={update} />
+      ) : tab === "fridge" && authUser ? (
+        <FridgeScreen userId={authUser.id} data={data} update={update} />
       ) : (
         <ShoppingV2
           data={data}
@@ -92,7 +97,7 @@ export function AppShell() {
           showFinances={() => setTab("finances")}
         />
       )}
-      <nav aria-label="Navegación principal" className="bottom-nav fixed inset-x-0 bottom-0 z-30 mx-auto grid w-full min-w-0 max-w-2xl grid-cols-3 border-t border-black/[.06] bg-white/95 px-2 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl">
+      <nav aria-label="Navegación principal" className={`bottom-nav fixed inset-x-0 bottom-0 z-30 mx-auto grid w-full min-w-0 max-w-2xl ${hasFridge ? "grid-cols-4" : "grid-cols-3"} border-t border-black/[.06] bg-white/95 px-2 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl`}>
         <Nav
           active={tab === "finances"}
           click={() => setTab("finances")}
@@ -100,12 +105,13 @@ export function AppShell() {
           label="Finanzas"
         />
         <Nav active={tab === "list"} click={() => setTab("list")} icon={<ListChecks />} label="Lista" />
+        {hasFridge && <Nav active={tab === "fridge"} click={() => setTab("fridge")} icon={<Refrigerator />} label="Refrigerador" />}
         <Nav active={tab === "shopping"} click={() => setTab("shopping")} icon={<ReceiptText />} label="Compras" />
         <button
           type="button"
           onClick={() => setAddingExpense(true)}
           aria-label="Nuevo gasto"
-          className="tap absolute left-1/2 -top-5 grid h-14 w-14 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-[20px] border-4 border-[#f3f6f3] bg-[#176b46] text-white shadow-[0_8px_22px_rgba(23,107,70,.32)] transition-transform duration-150"
+          className="tap absolute left-1/2 -top-7 grid h-14 w-14 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-[20px] border-4 border-[#f3f6f3] bg-[#176b46] text-white shadow-[0_8px_22px_rgba(23,107,70,.32)] transition-transform duration-150"
         >
           <Plus size={30} strokeWidth={2.5} />
         </button>
@@ -177,9 +183,7 @@ function Nav({
   );
 }
 
-function Finances({ data, update, dark, reload }: { data: AppData; update: Update; dark: boolean; reload: () => Promise<void> }) {
-  const [editing, setEditing] = useState<Expense>();
-  const [managingCategories, setManagingCategories] = useState(false);
+function Finances({ data, dark, reload }: { data: AppData; dark: boolean; reload: () => Promise<void> }) {
   const today = new Date();
   const month = data.expenses.filter((e) => {
     const d = new Date(e.date);
@@ -192,9 +196,6 @@ function Finances({ data, update, dark, reload }: { data: AppData; update: Updat
   const week = month
     .filter((e) => Date.now() - new Date(e.date).getTime() < 604800000)
     .reduce((n, e) => n + e.amount, 0);
-  const shown = [...data.expenses]
-    .sort((a, b) => b.date.localeCompare(a.date))
-    .slice(0, 8);
   const totals = data.categories
     .map((category) => ({
       category,
@@ -205,10 +206,6 @@ function Finances({ data, update, dark, reload }: { data: AppData; update: Updat
     .filter((row) => row.total > 0)
     .sort((a, b) => b.total - a.total);
   const largestCategoryTotal = totals[0]?.total || 1;
-  const save = (expense: Expense) => {
-    update((current) => saveExpense(current, expense));
-    setEditing(undefined);
-  };
   return (
     <>
       <header className="flex items-center px-5 pb-5 pt-[max(2rem,env(safe-area-inset-top))]">
@@ -254,70 +251,7 @@ function Finances({ data, update, dark, reload }: { data: AppData; update: Updat
             )}
           </div>
         </section>
-        <section>
-          <h2 className="mb-3 text-xl font-bold tracking-[-.01em]">Movimientos recientes</h2>
-          <div className="overflow-hidden rounded-[26px] border border-black/[.04] bg-white">
-            {shown.map((e) => {
-              const c = data.categories.find((x) => x.id === e.categoryId);
-              return (
-                <button
-                  key={e.id}
-                  onClick={() => setEditing(e)}
-                  className="flex min-h-[76px] w-full items-center gap-3 border-b border-black/5 px-4 py-3.5 text-left last:border-0"
-                >
-                  <span style={{ backgroundColor: getCategorySoftColor(c) }} className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl text-2xl">{categoryEmoji(c)}</span>
-                  <span className="min-w-0 flex-1">
-                    <b className="block truncate text-[15px]">{e.description}</b>
-                    <small className="mt-1 block truncate text-[13px] text-[#718078]">
-                      {c?.name ? `${c.name} · ` : ""}
-                      {new Date(e.date).toLocaleDateString("es-CL")}
-                    </small>
-                  </span>
-                  <b className="shrink-0 whitespace-nowrap text-sm">{formatMoney(e.amount)}</b>
-                  <span className="grid h-11 w-8 shrink-0 place-items-center" aria-hidden="true"><MoreHorizontal size={20} /></span>
-                </button>
-              );
-            })}
-            {!shown.length && (
-              <p className="p-8 text-center text-sm text-[#718078]">
-                No hay movimientos para mostrar.
-              </p>
-            )}
-          </div>
-        </section>
       </div>
-      {editing && (
-        <QuickExpenseForm
-          categories={data.categories}
-          expense={editing}
-          close={() => {
-            setEditing(undefined);
-          }}
-          save={save}
-          onManageCategories={() => setManagingCategories(true)}
-          remove={
-            editing
-              ? () => {
-                  if (!window.confirm("¿Eliminar este gasto y su compra asociada?")) return;
-                  update((current) => deleteExpense(current, editing.id));
-                  setEditing(undefined);
-                }
-              : undefined
-          }
-        />
-      )}
-      {managingCategories && (
-        <CategoryManager
-          categories={data.categories}
-          usedCategoryIds={
-            new Set(data.expenses.map((expense) => expense.categoryId))
-          }
-          close={() => setManagingCategories(false)}
-          onChange={(categories) =>
-            update((current) => ({ ...current, categories }))
-          }
-        />
-      )}
     </>
   );
 }

@@ -1,8 +1,8 @@
 "use client";
 
-import { ChevronDown, ChevronLeft, ChevronRight, Pencil, ReceiptText, Search, ShoppingBasket, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, MoreHorizontal, Pencil, ReceiptText, Search, ShoppingBasket, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { categoryEmoji, formatMoney, QuickExpenseForm } from "./expense-ui";
+import { categoryEmoji, CategoryManager, formatMoney, QuickExpenseForm } from "./expense-ui";
 import type { AppData, Category, Expense, Purchase } from "@/lib/types";
 import { deleteExpense, saveExpense } from "@/lib/expense-sync";
 import { getCategoryBorderColor, getCategorySoftColor } from "@/lib/category-colors";
@@ -13,6 +13,8 @@ const shortDate = (value: string) => new Date(value).toLocaleDateString("es-CL",
 
 export function ShoppingV2({ data, update }: { data: AppData; update: Update; showFinances: () => void }) {
   const [selectedId, setSelectedId] = useState<string>();
+  const [editingExpense, setEditingExpense] = useState<Expense>();
+  const [managingCategories, setManagingCategories] = useState(false);
   const selected = data.purchases.find((purchase) => purchase.id === selectedId);
 
   useEffect(() => {
@@ -34,10 +36,14 @@ export function ShoppingV2({ data, update }: { data: AppData; update: Update; sh
   }, [data.expenses, update]);
 
   if (selected) return <PurchaseDetail purchase={selected} data={data} update={update} back={() => setSelectedId(undefined)} />;
-  return <PurchaseHistory data={data} open={setSelectedId} />;
+  return <>
+    <PurchaseHistory data={data} open={setSelectedId} edit={setEditingExpense} />
+    {editingExpense && <QuickExpenseForm categories={data.categories} expense={editingExpense} close={() => setEditingExpense(undefined)} save={(next) => { update((current) => saveExpense(current, next)); setEditingExpense(undefined); }} onManageCategories={() => setManagingCategories(true)} remove={() => { if (!window.confirm("¿Eliminar este gasto y su compra asociada?")) return; update((current) => deleteExpense(current, editingExpense.id)); setEditingExpense(undefined); }} />}
+    {managingCategories && <CategoryManager categories={data.categories} usedCategoryIds={new Set(data.expenses.map((expense) => expense.categoryId))} close={() => setManagingCategories(false)} onChange={(categories) => update((current) => ({ ...current, categories }))} />}
+  </>;
 }
 
-function PurchaseHistory({ data, open }: { data: AppData; open: (id: string) => void }) {
+function PurchaseHistory({ data, open, edit }: { data: AppData; open: (id: string) => void; edit: (expense: Expense) => void }) {
   const [query, setQuery] = useState("");
   const [categoryId, setCategoryId] = useState("all");
   const [showMore, setShowMore] = useState(false);
@@ -61,12 +67,23 @@ function PurchaseHistory({ data, open }: { data: AppData; open: (id: string) => 
     });
     return [...map.entries()];
   }, [filteredPurchases]);
+  const recentExpenses = [...data.expenses].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 8);
   return <>
     <header className="px-5 pb-5 pt-[max(2rem,env(safe-area-inset-top))]"><p className="text-[13px] font-bold uppercase tracking-[.18em] text-[#6f8278]">Historial</p><h1 className="mt-1 text-[30px] font-bold leading-tight">Compras</h1></header>
     <div className="space-y-7 px-4 pb-28">
       <section className="space-y-3">
         <div className="relative"><Search className="absolute left-4 top-1/2 -translate-y-1/2 text-[#718078]" size={19}/><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar compras…" className="theme-card min-h-14 w-full rounded-2xl border border-black/[.04] bg-white py-3 pl-12 pr-4 outline-none"/></div>
         {purchaseCategories.length > 0 && <div className="grid grid-cols-4 gap-2">{primaryCategories.map((category) => <button key={category.id} onClick={() => setCategoryId((current) => current === category.id ? "all" : category.id)} aria-label={`Filtrar por ${category.name || categoryEmoji(category)}`} style={categoryId === category.id ? { backgroundColor: getCategorySoftColor(category), borderColor: getCategoryBorderColor(category) } : undefined} className={`min-h-12 rounded-2xl border text-xl ${categoryId === category.id ? "" : "theme-card border-black/[.04] bg-white"}`}>{categoryEmoji(category)}</button>)}{remainingCategories.length > 0 && <button onClick={() => setShowMore((current) => !current)} className="theme-card flex min-h-12 items-center justify-center rounded-2xl border border-black/[.04] bg-white text-xs font-bold">Otros <ChevronDown size={15} className={showMore ? "rotate-180" : ""}/></button>}{showMore && remainingCategories.map((category) => <button key={category.id} onClick={() => setCategoryId((current) => current === category.id ? "all" : category.id)} style={categoryId === category.id ? { backgroundColor: getCategorySoftColor(category), borderColor: getCategoryBorderColor(category) } : undefined} className={`min-h-12 rounded-2xl border text-xl ${categoryId === category.id ? "" : "theme-card border-black/[.04] bg-white"}`}>{categoryEmoji(category)}</button>)}</div>}
+      </section>
+      <section>
+        <h2 className="mb-3 text-xl font-bold tracking-[-.01em]">Movimientos recientes</h2>
+        <div className="theme-card overflow-hidden rounded-[26px] border border-black/[.04] bg-white">
+          {recentExpenses.map((expense) => {
+            const category = data.categories.find((item) => item.id === expense.categoryId);
+            return <button key={expense.id} onClick={() => edit(expense)} className="flex min-h-[76px] w-full items-center gap-3 border-b border-black/5 px-4 py-3.5 text-left last:border-0"><span style={{ backgroundColor: getCategorySoftColor(category) }} className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl text-2xl">{categoryEmoji(category)}</span><span className="min-w-0 flex-1"><b className="block truncate text-[15px]">{expense.description}</b><small className="mt-1 block truncate text-[13px] text-[#718078]">{category?.name ? `${category.name} · ` : ""}{new Date(expense.date).toLocaleDateString("es-CL")}</small></span><b className="shrink-0 whitespace-nowrap text-sm">{formatMoney(expense.amount)}</b><span className="grid h-11 w-8 shrink-0 place-items-center" aria-hidden="true"><MoreHorizontal size={20}/></span></button>;
+          })}
+          {!recentExpenses.length && <p className="p-8 text-center text-sm text-[#718078]">No hay movimientos para mostrar.</p>}
+        </div>
       </section>
       {!groups.length && <section className="theme-card rounded-[28px] bg-white p-8 text-center"><ShoppingBasket className="mx-auto mb-3 text-[#91a098]" size={32}/><h2 className="font-bold">Aún no hay compras</h2><p className="mt-1 text-sm text-[#718078]">Registra un gasto de supermercado desde Finanzas.</p></section>}
       {groups.map(([month, purchases]) => <section key={month}>
