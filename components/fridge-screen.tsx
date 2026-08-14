@@ -29,6 +29,7 @@ import type { RecipeSuggestion } from "@/lib/recipes/types";
 import { savedRecipeRepository } from "@/lib/recipes/saved-repository";
 import { recipeFingerprint, type SavedRecipe } from "@/lib/recipes/saved-types";
 import { recipeAsText, recipePdf } from "@/lib/recipes/share";
+import { shareOrDownloadPdf } from "@/lib/pdf/share";
 
 type Update = (fn: (data: AppData) => AppData) => void;
 const uid = () => crypto.randomUUID();
@@ -941,19 +942,8 @@ function RecipeShareSheet({ recipe, close }: { recipe: RecipeSuggestion; close: 
     try {
       const blob = await recipePdf(recipe);
       const filename = `${recipe.title.replace(/[^a-z0-9áéíóúñ]+/gi, "-").replace(/^-|-$/g, "").toLowerCase() || "receta"}.pdf`;
-      const file = new File([blob], filename, { type: "application/pdf" });
-      if (navigator.canShare?.({ files: [file] })) {
-        await navigator.share({ files: [file], title: recipe.title });
-        setStatus("PDF compartido");
-      } else {
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.href = url;
-        link.download = filename;
-        link.click();
-        window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-        setStatus("PDF descargado");
-      }
+      const result = await shareOrDownloadPdf(blob, filename, recipe.title);
+      setStatus(result === "shared" ? "PDF compartido" : "PDF descargado");
     } catch (cause) {
       if (cause instanceof DOMException && cause.name === "AbortError") return;
       setStatus("No pudimos crear el PDF");

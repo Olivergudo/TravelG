@@ -12,6 +12,7 @@ import type { AppData } from "../../types";
 import { userDataCacheKey } from "../../repository";
 import { formatCurrency } from "../../currency";
 import { requiredPreferences } from "../../user-preferences";
+import { movementAsText, movementPdf, movementPdfFilename } from "../../movements/share";
 
 const food = ["Papa", "PAPA KG", "Cebolla", "CEBOLLA 1KG", "Tomate", "Jitomate", "Palta", "Aguacate", "Poroto", "Frijol", "Choclo", "Elote", "Leche", "LECHE ENT 1L", "Huevos 12U", "Pollo", "Vacuno", "Carne molida", "Salmón", "Merluza", "Pan", "Tortilla", "Arroz", "Pasta", "Mostaza", "Mayonesa", "Café", "Agua mineral", "Chocolate", "Coca Cola"];
 const nonFood = ["Shampoo", "Dove Shampoo", "Detergente", "Papel higiénico", "PAP HIG 12R", "PAPEL HIG 12R", "Jabón", "Desodorante", "Pasta dental", "Cloro", "Suavizante", "Bolsa basura", "Comida perro", "Whiskas", "PANTENE SHAMPOO"];
@@ -142,4 +143,16 @@ test("el onboarding solicita únicamente las preferencias faltantes", () => {
   assert.equal(requiredPreferences({ currency: "MXN" }).needsName, true);
   assert.deepEqual(requiredPreferences({}).needsName, true);
   assert.deepEqual(requiredPreferences({}).needsCurrency, true);
+});
+
+test("crea resumen y PDF de un ticket sin inventar precios", async () => {
+  const ticket = { title: "Rendic Hermanos S.A.", amount: 13910, date: "2026-08-26T12:00:00.000Z", category: "Supermercado", products: [{ id: "p1", purchaseId: "t1", productName: "Pan", normalizedName: "pan", quantity: 1, unitPrice: 0, totalPrice: 0, createdAt: "2026-08-26T12:00:00.000Z" }], isTicket: true };
+  const text = movementAsText(ticket, "CLP");
+  assert.match(text, /Rendic Hermanos/);
+  assert.match(text, /- Pan/);
+  assert.doesNotMatch(text, /\$0/);
+  assert.equal(movementPdfFilename(ticket), "ticket-rendic-hermanos-s-a-26-08-2026.pdf");
+  const pdf = await movementPdf(ticket, "CLP");
+  assert.equal(pdf.type, "application/pdf");
+  assert.ok(pdf.size > 500);
 });
