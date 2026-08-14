@@ -124,7 +124,7 @@ function RoomiesWelcome({ error, open, reload, sheet }: { error: string; open: (
         <button type="button" onClick={() => open("create")} className="mt-7 min-h-14 w-full rounded-2xl bg-[#176b46] px-4 font-bold text-white">Crear hogar</button>
         <button type="button" onClick={() => open("join")} className="theme-card mt-3 min-h-14 w-full rounded-2xl border border-black/10 bg-white px-4 font-bold text-[#176b46]">Unirme a un hogar</button>
       </div>
-      {sheet && <OnboardingSheet sheet={sheet} close={() => open(null)} completed={reload}/>} 
+      {sheet && <OnboardingSheet sheet={sheet} close={() => open(null)} completed={reload}/>}
     </section>
   );
 }
@@ -247,7 +247,7 @@ function DebtsView({ userId, data, reload }: { userId: string; data: RoomiesData
     <div className="mt-4 flex gap-2"><button type="button" onClick={() => setResolved(false)} className={`min-h-10 rounded-full px-4 text-sm font-bold ${!resolved ? "bg-[#176b46] text-white" : "theme-card bg-white text-[#718078]"}`}>Activos</button><button type="button" onClick={() => setResolved(true)} className={`min-h-10 rounded-full px-4 text-sm font-bold ${resolved ? "bg-[#176b46] text-white" : "theme-card bg-white text-[#718078]"}`}>Resueltos</button></div>
     {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
     <div className="mt-4 space-y-3">
-      {debts.length === 0 && <Empty icon={<PackageCheck/>} title={resolved ? "Sin reposiciones resueltas" : "Todo está al día"} text={resolved ? "Aquí aparecerá el historial confirmado." : "No hay productos pendientes de reposición."}/>} 
+      {debts.length === 0 && <Empty icon={<PackageCheck/>} title={resolved ? "Sin reposiciones resueltas" : "Todo está al día"} text={resolved ? "Aquí aparecerá el historial confirmado." : "No hay productos pendientes de reposición."}/>}
       {debts.map((debt) => <article key={debt.id} className="theme-card rounded-[22px] border border-black/[.06] bg-white p-4 shadow-sm">
         <div className="flex items-start gap-3"><div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-[#e3f2e9] text-[#176b46]">🥛</div><div className="min-w-0 flex-1"><h3 className="font-bold">{debt.product_name}</h3><p className="text-sm text-[#718078]">{names.get(debt.debtor_user_id)} → {names.get(debt.owner_user_id)}</p></div></div>
         <p className="mt-3 text-sm font-semibold text-[#176b46]">{debt.status === "pending" ? "Pendiente de reposición" : debt.status === "awaiting_confirmation" ? `Esperando confirmación de ${names.get(debt.owner_user_id)}` : "Reposición confirmada"}</p>
