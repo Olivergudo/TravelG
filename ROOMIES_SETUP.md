@@ -47,3 +47,6 @@ inicio y pulsar **Activar notificaciones** dentro de Roomies.
 
 Las operaciones críticas las validan funciones PostgreSQL; modificar botones o
 peticiones desde el navegador no permite que el deudor confirme su propia reposición.
+
+El menú del hogar también permite salir. Si sale el propietario y quedan participantes,
+la propiedad se transfiere al miembro más antiguo; si no queda nadie, el hogar se elimina.

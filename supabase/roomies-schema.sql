@@ -237,14 +237,42 @@ begin
 end;
 $$;
 
+create or replace function public.leave_household(target_household uuid)
+returns void language plpgsql security definer set search_path = public as $$
+declare
+  uid uuid := auth.uid();
+  current_owner uuid;
+  next_owner uuid;
+begin
+  if uid is null or not public.is_household_member(target_household) then raise exception 'Access denied'; end if;
+  select owner_id into current_owner from public.households where id = target_household for update;
+  if current_owner = uid then
+    select user_id into next_owner
+    from public.household_members
+    where household_id = target_household and user_id <> uid
+    order by joined_at, id
+    limit 1;
+    if next_owner is null then
+      delete from public.households where id = target_household;
+      return;
+    end if;
+    update public.households set owner_id = next_owner where id = target_household;
+    update public.household_members set role = 'owner' where household_id = target_household and user_id = next_owner;
+  end if;
+  delete from public.household_members where household_id = target_household and user_id = uid;
+end;
+$$;
+
 revoke all on function public.create_household(text) from public;
 revoke all on function public.join_household(text) from public;
 revoke all on function public.create_roomie_event(uuid, text, jsonb) from public;
 revoke all on function public.update_replacement_debt(uuid, text) from public;
+revoke all on function public.leave_household(uuid) from public;
 grant execute on function public.create_household(text) to authenticated;
 grant execute on function public.join_household(text) to authenticated;
 grant execute on function public.create_roomie_event(uuid, text, jsonb) to authenticated;
 grant execute on function public.update_replacement_debt(uuid, text) to authenticated;
+grant execute on function public.leave_household(uuid) to authenticated;
 
 grant select on public.households, public.household_members, public.household_messages, public.replacement_debts to authenticated;
 grant insert on public.household_messages to authenticated;

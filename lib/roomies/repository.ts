@@ -68,3 +68,8 @@ export async function updateDebt(debtId: string, operation: "report" | "confirm"
   if (error) throw error;
   return data as string;
 }
+
+export async function leaveHousehold(householdId: string) {
+  const { error } = await configured().rpc("leave_household", { target_household: householdId });
+  if (error) throw error;
+}
