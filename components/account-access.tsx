@@ -44,6 +44,7 @@ export function AccountAccess({
   const [sent, setSent] = useState(false);
   const [error, setError] = useState("");
   const [preference, setPreference] = useState<"name" | "currency" | "theme">();
+  const modalOpen = open || Boolean(preference);
 
   useEffect(() => {
     if (!supabase) return;
@@ -55,6 +56,28 @@ export function AccountAccess({
     );
     return () => listener.subscription.unsubscribe();
   }, []);
+
+  useEffect(() => {
+    if (!modalOpen) return;
+    const scrollY = window.scrollY;
+    const previous = {
+      position: document.body.style.position,
+      top: document.body.style.top,
+      width: document.body.style.width,
+      overflow: document.body.style.overflow,
+    };
+    document.body.style.position = "fixed";
+    document.body.style.top = `-${scrollY}px`;
+    document.body.style.width = "100%";
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.position = previous.position;
+      document.body.style.top = previous.top;
+      document.body.style.width = previous.width;
+      document.body.style.overflow = previous.overflow;
+      window.scrollTo(0, scrollY);
+    };
+  }, [modalOpen]);
 
   const isAnonymous = user?.is_anonymous !== false;
 
@@ -125,12 +148,12 @@ export function AccountAccess({
       </button>
       {open && (
         <div
-          className="fixed inset-0 z-[80] grid items-end bg-black/45 p-0 sm:items-center sm:p-5"
+          className="fixed inset-0 z-[80] grid items-end overscroll-none bg-black/45 p-0 sm:items-center sm:p-5"
           onMouseDown={(event) =>
             event.target === event.currentTarget && setOpen(false)
           }
         >
-          <section className="theme-card sheet mx-auto max-h-[92dvh] w-full max-w-md overflow-y-auto rounded-t-[30px] bg-white p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl sm:rounded-[30px]">
+          <section className="theme-card sheet mx-auto max-h-[92dvh] w-full max-w-md overscroll-contain overflow-y-auto rounded-t-[30px] bg-white p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl sm:rounded-[30px]">
             <div className="mb-5 flex items-center justify-between">
               <div>
                 <p className="text-xs font-bold uppercase tracking-[.14em] text-[#718078]">
@@ -275,7 +298,7 @@ function PreferenceRow({ icon, label, value, action }: { icon: React.ReactNode; 
 }
 
 function PreferenceSheet({ title, close, children }: { title: string; close: () => void; children: React.ReactNode }) {
-  return <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/55 sm:items-center" onMouseDown={(event) => event.target === event.currentTarget && close()}><section className="theme-card w-full max-w-md rounded-t-[30px] bg-white p-5 safe-bottom sm:rounded-[30px]"><div className="flex items-center"><h2 className="flex-1 text-xl font-bold">{title}</h2><button onClick={close} aria-label="Cerrar" className="grid h-11 w-11 place-items-center rounded-full bg-[#f1f4f2]"><X size={20}/></button></div>{children}</section></div>;
+  return <div className="fixed inset-0 z-[100] flex items-end justify-center overscroll-none bg-black/55 sm:items-center" onMouseDown={(event) => event.target === event.currentTarget && close()}><section className="theme-card max-h-[92dvh] w-full max-w-md overscroll-contain overflow-y-auto rounded-t-[30px] bg-white p-5 safe-bottom sm:rounded-[30px]"><div className="flex items-center"><h2 className="flex-1 text-xl font-bold">{title}</h2><button onClick={close} aria-label="Cerrar" className="grid h-11 w-11 place-items-center rounded-full bg-[#f1f4f2]"><X size={20}/></button></div>{children}</section></div>;
 }
 
 function NameEditor({ current, close, save }: { current: string; close: () => void; save: (name: string) => Promise<void> }) {
