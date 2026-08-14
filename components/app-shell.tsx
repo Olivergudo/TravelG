@@ -1,13 +1,12 @@
 "use client";
 import { useEffect, useState } from "react";
+import type { User } from "@supabase/supabase-js";
 import {
   BadgeDollarSign,
   MoreHorizontal,
-  Moon,
   Plus,
   ListChecks,
   ReceiptText,
-  Sun,
 } from "lucide-react";
 import { ShoppingV2 } from "./shopping-v2";
 import { ShoppingList } from "./shopping-list";
@@ -18,10 +17,15 @@ import type { AppData, Expense } from "@/lib/types";
 import { deleteExpense, saveExpense } from "@/lib/expense-sync";
 import { FinanceCharts, FinanceHeroDonut } from "./finance-charts";
 import { getCategoryColor, getCategorySoftColor } from "@/lib/category-colors";
+import { AccountAccess } from "./account-access";
+import { AnonymousLinkScreen, EmailAccessScreen } from "./email-access-screen";
+import { isSupabaseConfigured, supabase } from "@/lib/supabase";
 type Update = (fn: (data: AppData) => AppData) => void;
 
 export function AppShell() {
-  const { data, update, ready } = useAppData();
+  const { data, update, ready, reload } = useAppData();
+  const [authReady, setAuthReady] = useState(!isSupabaseConfigured);
+  const [authUser, setAuthUser] = useState<User | null>(null);
   const [tab, setTab] = useState<"finances" | "list" | "shopping">("finances");
   const [theme, setTheme] = useState<"light" | "dark">("light");
   const [addingExpense, setAddingExpense] = useState(false);
@@ -29,31 +33,47 @@ export function AppShell() {
   const [managingCategories, setManagingCategories] = useState(false);
   const [savedFeedback, setSavedFeedback] = useState(false);
   useEffect(() => {
-    const saved = localStorage.getItem("gasto-listo-theme");
-    const preferred = saved === "dark" || saved === "light"
-      ? saved
-      : window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-    const timer = window.setTimeout(() => setTheme(preferred), 0);
-    return () => window.clearTimeout(timer);
+    if (!supabase) return;
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setAuthUser(session?.user ?? null);
+      setAuthReady(true);
+    });
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setAuthUser(session?.user ?? null);
+      setAuthReady(true);
+    });
+    return () => listener.subscription.unsubscribe();
   }, []);
-  const toggleTheme = () => setTheme((current) => {
-    const next = current === "light" ? "dark" : "light";
-    localStorage.setItem("gasto-listo-theme", next);
-    return next;
-  });
+  useEffect(() => {
+    if (authUser) reload().catch(() => undefined);
+  }, [authUser, reload]);
+  useEffect(() => {
+    const colorScheme = window.matchMedia("(prefers-color-scheme: dark)");
+    const syncWithDevice = (event?: MediaQueryListEvent) => {
+      setTheme((event?.matches ?? colorScheme.matches) ? "dark" : "light");
+    };
+
+    syncWithDevice();
+    colorScheme.addEventListener("change", syncWithDevice);
+    localStorage.removeItem("gasto-listo-theme");
+
+    return () => colorScheme.removeEventListener("change", syncWithDevice);
+  }, []);
   useEffect(() => {
     document.documentElement.dataset.appTheme = theme;
   }, [theme]);
-  if (!ready)
+  if (!authReady || (authUser && !ready))
     return (
       <main className="grid min-h-screen place-items-center text-[#708078]">
         Cargando…
       </main>
     );
+  if (isSupabaseConfigured && !authUser) return <EmailAccessScreen />;
+  if (authUser?.is_anonymous) return <AnonymousLinkScreen />;
   return (
     <main data-theme={theme} className="theme-root mx-auto min-h-dvh w-full min-w-0 max-w-2xl bg-[#f3f6f3] safe-bottom sm:shadow-[0_0_40px_rgba(23,61,45,.08)]">
       {tab === "finances" ? (
-        <Finances data={data} update={update} dark={theme === "dark"} toggleTheme={toggleTheme} />
+        <Finances data={data} update={update} dark={theme === "dark"} reload={reload} />
       ) : tab === "list" ? (
         <ShoppingList data={data} update={update} />
       ) : (
@@ -76,7 +96,7 @@ export function AppShell() {
           type="button"
           onClick={() => setAddingExpense(true)}
           aria-label="Nuevo gasto"
-          className="tap absolute left-1/2 -top-3 grid h-14 w-14 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-[20px] border-4 border-[#f3f6f3] bg-[#176b46] text-white shadow-[0_8px_22px_rgba(23,107,70,.32)] transition-transform duration-150"
+          className="tap absolute left-1/2 -top-5 grid h-14 w-14 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-[20px] border-4 border-[#f3f6f3] bg-[#176b46] text-white shadow-[0_8px_22px_rgba(23,107,70,.32)] transition-transform duration-150"
         >
           <Plus size={30} strokeWidth={2.5} />
         </button>
@@ -148,7 +168,7 @@ function Nav({
   );
 }
 
-function Finances({ data, update, dark, toggleTheme }: { data: AppData; update: Update; dark: boolean; toggleTheme: () => void }) {
+function Finances({ data, update, dark, reload }: { data: AppData; update: Update; dark: boolean; reload: () => Promise<void> }) {
   const [editing, setEditing] = useState<Expense>();
   const [managingCategories, setManagingCategories] = useState(false);
   const today = new Date();
@@ -188,7 +208,7 @@ function Finances({ data, update, dark, toggleTheme }: { data: AppData; update: 
         </p>
         <h1 className="mt-1 text-[30px] font-bold leading-tight tracking-[-.02em]">Finanzas</h1>
         </div>
-        <button onClick={toggleTheme} aria-label={dark ? "Usar tema claro" : "Usar tema oscuro"} className="theme-card grid h-12 w-12 place-items-center rounded-2xl bg-white text-[#176b46] shadow-sm">{dark ? <Sun size={21} /> : <Moon size={21} />}</button>
+        <AccountAccess onAccountChanged={() => { reload().catch(() => undefined); }} />
       </header>
       <section className="mx-4 min-w-0 rounded-[30px] bg-[#173d2d] p-6 text-white shadow-[0_10px_30px_rgba(23,61,45,.12)]">
         <FinanceHeroDonut expenses={month} categories={data.categories} total={total} />

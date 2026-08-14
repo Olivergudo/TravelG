@@ -214,11 +214,7 @@ class SupabaseRepository implements DataRepository {
     const { data: sessionData } = await supabase.auth.getSession();
     if (sessionData.session?.user.id) return sessionData.session.user.id;
 
-    const { data, error } = await supabase.auth.signInAnonymously();
-    if (error || !data.user) {
-      throw error ?? new Error("No se pudo iniciar la sesión anónima");
-    }
-    return data.user.id;
+    throw new Error("Debes iniciar sesión para acceder a tus datos");
   }
 
   async load(): Promise<AppData> {
