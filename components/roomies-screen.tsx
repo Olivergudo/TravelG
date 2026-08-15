@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Bell,
   Check,
+  ChevronRight,
+  CircleDollarSign,
   Copy,
   Home,
   LoaderCircle,
@@ -20,29 +22,37 @@ import {
 import { supabase } from "@/lib/supabase";
 import {
   createEvent,
+  createGroupExpense,
   createHousehold,
   joinHousehold,
   leaveHousehold,
   loadRoomies,
   sendMessage,
   updateDebt,
+  updateGroupExpensePayment,
 } from "@/lib/roomies/repository";
-import type { Household, HouseholdMember, ReplacementDebt, RoomieMessage } from "@/lib/roomies/types";
+import type { GroupExpense, Household, HouseholdMember, ReplacementDebt, RoomieMessage } from "@/lib/roomies/types";
 import { enableRoomieNotifications, notifyRoomieEvent } from "@/lib/roomies/push-client";
+import { getUserPendingDebts } from "@/lib/roomies/pending";
+import { buildExpenseShares } from "@/lib/roomies/group-expenses";
 import { useI18n } from "@/lib/i18n";
+import { formatCurrency, type Currency } from "@/lib/currency";
 
 type RoomiesData = Awaited<ReturnType<typeof loadRoomies>>;
-type Sheet = "create" | "join" | "household" | "actions" | "request" | "taken" | "purchased" | null;
+type Sheet = "create" | "join" | "household" | "actions" | "request" | "taken" | "purchased" | "groupExpense" | null;
+const groupExpenseCategories = ["food", "transport", "home", "supermarket", "services", "other"] as const;
 
 export function RoomiesScreen({
   userId,
+  currency,
   onAttentionChange,
 }: {
   userId: string;
+  currency: Currency;
   onAttentionChange: (count: number) => void;
 }) {
   const { t } = useI18n();
-  const [data, setData] = useState<RoomiesData>({ household: null, members: [], messages: [], debts: [] });
+  const [data, setData] = useState<RoomiesData>({ household: null, members: [], messages: [], debts: [], groupExpenses: [] });
   const [ready, setReady] = useState(false);
   const [error, setError] = useState("");
   const [sheet, setSheet] = useState<Sheet>(null);
@@ -65,12 +75,10 @@ export function RoomiesScreen({
 
   useEffect(() => { queueMicrotask(() => void reload()); }, [reload]);
   useEffect(() => {
-    const attention = data.debts.filter((debt) =>
-      (debt.debtor_user_id === userId && debt.status === "pending") ||
-      (debt.owner_user_id === userId && debt.status === "awaiting_confirmation"),
-    ).length;
+    const paymentAttention = data.groupExpenses.filter((expense) => expense.status !== "paid" && expense.status !== "cancelled" && (expense.payer_id === userId || expense.group_expense_shares.some((share) => share.user_id === userId && share.status !== "confirmed_paid"))).length;
+    const attention = getUserPendingDebts(data.debts, userId).length + paymentAttention;
     onAttentionChange(attention);
-  }, [data.debts, onAttentionChange, userId]);
+  }, [data.debts, data.groupExpenses, onAttentionChange, userId]);
   useEffect(() => {
     if (!supabase || !data.household) return;
     const householdId = data.household.id;
@@ -78,6 +86,8 @@ export function RoomiesScreen({
       .channel(`roomies:${householdId}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "household_messages", filter: `household_id=eq.${householdId}` }, () => void reload())
       .on("postgres_changes", { event: "*", schema: "public", table: "replacement_debts", filter: `household_id=eq.${householdId}` }, () => void reload())
+      .on("postgres_changes", { event: "*", schema: "public", table: "group_expenses", filter: `household_id=eq.${householdId}` }, () => void reload())
+      .on("postgres_changes", { event: "*", schema: "public", table: "group_expense_shares" }, () => void reload())
       .subscribe();
     return () => { void supabase?.removeChannel(channel); };
   }, [data.household, reload]);
@@ -94,7 +104,7 @@ export function RoomiesScreen({
       {error && <p role="alert" className="mx-4 mt-3 rounded-2xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}
       <NotificationPrompt />
       {view === "chat" ? (
-        <ChatView userId={userId} data={data} openActions={() => setSheet("actions")} reload={reload} />
+        <ChatView userId={userId} data={data} openActions={() => setSheet("actions")} openPending={() => setView("pending")} reload={reload} />
       ) : (
         <DebtsView userId={userId} data={data} reload={reload} />
       )}
@@ -107,6 +117,7 @@ export function RoomiesScreen({
           members={data.members}
           debts={data.debts}
           userId={userId}
+          currency={currency}
           completed={async () => { setSheet(null); await reload(); }}
         />
       )}
@@ -171,7 +182,7 @@ function RoomiesHeader({ household, members, openMenu }: { household: Household;
   </header>;
 }
 
-function ChatView({ userId, data, openActions, reload }: { userId: string; data: RoomiesData; openActions: () => void; reload: () => Promise<void> }) {
+function ChatView({ userId, data, openActions, openPending, reload }: { userId: string; data: RoomiesData; openActions: () => void; openPending: () => void; reload: () => Promise<void> }) {
   const { t } = useI18n();
   const [message, setMessage] = useState("");
   const [sending, setSending] = useState(false);
@@ -187,11 +198,12 @@ function ChatView({ userId, data, openActions, reload }: { userId: string; data:
     finally { setSending(false); }
   };
   return <div className="px-4 pb-24">
-    <div className="mt-4 min-h-[36dvh] space-y-3 pb-4">
+    <PendingAlert userId={userId} data={data} open={openPending}/>
+    <div className="mt-4 min-h-[36dvh] space-y-2.5 pb-4">
       {data.messages.length === 0 && (
         <Empty icon={<MessageCircle/>} title={t("roomies.chat")} text={t("roomies.tagline")}/>
       )}
-      {data.messages.map((item) => <MessageCard key={item.id} item={item} mine={item.user_id === userId} actor={names.get(item.user_id) || "Roomie"} names={names} userId={userId} householdId={data.household!.id} reload={reload}/>) }
+      {data.messages.map((item) => <MessageCard key={item.id} item={item} mine={item.user_id === userId} actor={names.get(item.user_id) || "Roomie"} names={names} debts={data.debts} groupExpenses={data.groupExpenses} userId={userId} householdId={data.household!.id} reload={reload}/>) }
       <div ref={endRef}/>
     </div>
     {error && <p role="alert" className="mt-3 text-sm text-red-600">{error}</p>}
@@ -203,42 +215,184 @@ function ChatView({ userId, data, openActions, reload }: { userId: string; data:
   </div>;
 }
 
-function MessageCard({ item, mine, actor, names, userId, householdId, reload }: { item: RoomieMessage; mine: boolean; actor: string; names: Map<string, string>; userId: string; householdId: string; reload: () => Promise<void> }) {
+function PendingAlert({ userId, data, open }: { userId: string; data: RoomiesData; open: () => void }) {
+  const { t, count } = useI18n();
+  const pending = getUserPendingDebts(data.debts, userId);
+  const pendingExpenses = data.groupExpenses.filter((expense) => expense.status !== "paid" && expense.status !== "cancelled" && (expense.payer_id === userId || expense.group_expense_shares.some((share) => share.user_id === userId && share.status !== "confirmed_paid")));
+  const pendingCount = pending.length + pendingExpenses.length;
+  if (pendingCount === 0) return null;
+  if (pending.length === 0) {
+    const expense = pendingExpenses[0];
+    const myShare = expense.group_expense_shares.find((share) => share.user_id === userId);
+    const payer = data.members.find((member) => member.user_id === expense.payer_id)?.display_name || t("roomies.member");
+    return <button type="button" onClick={open} aria-label={t("activities.pending.view")} className="theme-card mt-4 flex min-h-[92px] w-full items-center gap-3 rounded-[22px] border border-amber-400/30 bg-white p-4 text-left shadow-sm transition active:scale-[.99]"><span className="relative grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-amber-400/15 text-amber-500"><CircleDollarSign size={22}/>{pendingCount > 1 && <b className="absolute -right-1.5 -top-1.5 grid h-5 min-w-5 place-items-center rounded-full bg-amber-500 px-1 text-[10px] text-white">{pendingCount}</b>}</span><span className="min-w-0 flex-1"><b className="block text-sm">{count("activities.pending.count", pendingCount)}</b><span className="mt-1 block truncate text-sm text-[#587067]">{pendingCount === 1 && myShare ? t("roomies.groupExpense.pendingFrom", { payer, amount: formatGroupAmount(Number(myShare.amount), expense.currency) }) : t("activities.pending.multipleHint")}</span></span><ChevronRight className="shrink-0 text-amber-500" size={21}/></button>;
+  }
+  const debt = pending[0];
+  const names = new Map(data.members.map((member) => [member.user_id, member.display_name]));
+  const debtor = names.get(debt.debtor_user_id) || t("roomies.member");
+  const owner = names.get(debt.owner_user_id) || t("roomies.member");
+  let description = t("activities.pending.multipleHint");
+  let detail = "";
+  if (pending.length === 1 && debt.debtor_user_id === userId) {
+    description = debt.status === "pending"
+      ? t("activities.pending.debtorMain", { product: debt.product_name })
+      : t("activities.pending.debtorReported", { product: debt.product_name });
+    detail = debt.status === "pending"
+      ? t("activities.pending.forOwner", { owner })
+      : t("activities.pending.waitingOwner", { owner });
+  } else if (pending.length === 1) {
+    description = debt.status === "pending"
+      ? t("activities.pending.ownerMain", { debtor, product: debt.product_name })
+      : t("activities.pending.ownerReported", { debtor, product: debt.product_name });
+    detail = debt.status === "pending" ? t("roomies.pendingReplacement") : t("roomies.activity.awaiting");
+  }
+  return <button type="button" onClick={open} aria-label={t("activities.pending.view")} className="theme-card mt-4 flex min-h-[92px] w-full items-center gap-3 rounded-[22px] border border-amber-400/30 bg-white p-4 text-left shadow-sm transition active:scale-[.99]">
+    <span className="relative grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-amber-400/15 text-amber-500"><Bell size={21}/>{pendingCount > 1 && <b className="absolute -right-1.5 -top-1.5 grid h-5 min-w-5 place-items-center rounded-full bg-amber-500 px-1 text-[10px] text-white">{pendingCount}</b>}</span>
+    <span className="min-w-0 flex-1"><b className="block text-sm">{count("activities.pending.count", pendingCount)}</b><span className="mt-1 block truncate text-sm text-[#587067]">{pendingCount > 1 ? t("activities.pending.multipleHint") : description}</span>{pendingCount === 1 && detail && <small className="mt-0.5 block truncate font-semibold text-amber-600">{detail}</small>}</span>
+    <ChevronRight className="shrink-0 text-amber-500" size={21}/>
+  </button>;
+}
+
+function MessageCard({ item, mine, actor, names, debts, groupExpenses, userId, householdId, reload }: { item: RoomieMessage; mine: boolean; actor: string; names: Map<string, string>; debts: ReplacementDebt[]; groupExpenses: GroupExpense[]; userId: string; householdId: string; reload: () => Promise<void> }) {
   const { t } = useI18n();
   const metadata = item.metadata;
   const product = String(metadata.productName || "producto");
   const owner = names.get(String(metadata.ownerUserId || "")) || "otro roomie";
   const event = item.type !== "message";
   const [sending, setSending] = useState(false);
+  const [actionError, setActionError] = useState("");
+  const debt = debts.find((candidate) => candidate.id === String(metadata.debtId || ""));
+  const groupExpense = groupExpenses.find((candidate) => candidate.id === String(metadata.expenseId || ""));
   let text = item.message || "";
   if (item.type === "product_request") text = t("roomies.event.request", { product });
   if (item.type === "product_available") text = t("roomies.event.available", { actor, product });
   if (item.type === "product_taken") text = t(metadata.needsReplacement ? "roomies.event.takenReplace" : "roomies.event.takenNoReplace", { actor, product, owner });
   if (item.type === "product_purchased") text = t(metadata.target === "all" ? "roomies.event.boughtAll" : metadata.target === "self" ? "roomies.event.boughtSelf" : "roomies.event.boughtMember", { actor, product, target: names.get(String(metadata.targetUserId)) || "Roomie" });
-  if (item.type === "replacement_reported") text = t("roomies.event.reported", { actor, product });
+  if (item.type === "replacement_reported") text = mine
+    ? t("roomies.event.reportedMine", { product })
+    : t("roomies.event.reported", { actor, product });
   if (item.type === "replacement_confirmed") text = t("roomies.event.confirmed", { actor, product });
   if (item.type === "replacement_rejected") text = t("roomies.event.rejected", { product });
+  const activityStyle = {
+    product_request: { icon: "🔎", accent: "#A1DBEE" },
+    product_available: { icon: "🟢", accent: "#4DC686" },
+    product_taken: { icon: "🥛", accent: "#D1AEDC" },
+    product_purchased: { icon: "🛒", accent: "#A1DBEE" },
+    replacement_reported: { icon: "⏳", accent: "#D9B44A" },
+    replacement_confirmed: { icon: "✅", accent: "#4DC686" },
+    replacement_rejected: { icon: "⚠️", accent: "#D1AEDC" },
+  }[item.type as "product_request" | "product_available" | "product_taken" | "product_purchased" | "replacement_reported" | "replacement_confirmed" | "replacement_rejected"];
+  const activityStatus = item.type === "product_taken"
+    ? t(!metadata.needsReplacement
+      ? "activities.status.noReplacement"
+      : debt?.status === "resolved"
+        ? "activities.status.resolved"
+        : debt?.status === "awaiting_confirmation"
+          ? "activities.status.awaitingConfirmation"
+          : "activities.status.pending")
+    : item.type === "replacement_reported"
+      ? t(debt?.status === "resolved" ? "activities.status.resolved" : "activities.status.awaitingConfirmation")
+      : item.type === "replacement_confirmed"
+        ? t("activities.status.resolved")
+        : item.type === "replacement_rejected"
+          ? t("activities.status.pending")
+          : item.type === "product_purchased"
+            ? t("activities.status.added")
+            : t("activities.status.active");
+  const activityDetail = item.type === "product_taken"
+    ? t("activities.compact.taken", { actor, owner })
+    : item.type === "replacement_reported"
+      ? t(mine ? "activities.compact.reportedMine" : "activities.compact.reported", { actor })
+      : item.type === "replacement_confirmed"
+        ? t("activities.compact.confirmed")
+        : item.type === "replacement_rejected"
+          ? t("activities.compact.rejected")
+          : item.type === "product_request"
+            ? t("activities.compact.request", { actor })
+            : item.type === "product_available"
+              ? t("activities.compact.available", { actor })
+              : t("activities.compact.purchased", { actor });
   const answer = async () => {
     setSending(true);
     try { const id = await createEvent(householdId, "product_available", { requestId: item.id, productName: product }); await notifyRoomieEvent(id); await reload(); }
     finally { setSending(false); }
   };
-  return <article className={`${event ? "theme-card border border-[#176b46]/15 bg-white" : mine ? "ml-12 bg-[#176b46] text-white" : "theme-card mr-12 bg-white"} rounded-2xl px-4 py-3 shadow-sm`}>
-    <p className={`text-xs font-bold ${mine && !event ? "text-white/70" : "text-[#176b46]"}`}>{event ? eventLabel(item.type, actor) : actor}</p>
-    <p data-i18n-ignore={item.type === "message" ? "true" : undefined} className="mt-1 whitespace-pre-wrap text-sm leading-relaxed">{text}</p>
-    {item.type === "product_request" && item.user_id !== userId && <button type="button" disabled={sending} onClick={() => void answer()} className="mt-3 min-h-10 rounded-xl bg-[#e3f2e9] px-4 text-sm font-bold text-[#176b46] disabled:opacity-50">Yo tengo</button>}
-    <time className={`mt-1 block text-[11px] ${mine && !event ? "text-white/55" : "text-[#839087]"}`}>{new Date(item.created_at).toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" })}</time>
+  const updateReplacement = async (operation: "report" | "confirm" | "reject") => {
+    if (!debt || sending) return;
+    setSending(true); setActionError("");
+    try {
+      const messageId = await updateDebt(debt.id, operation);
+      await notifyRoomieEvent(messageId);
+      await reload();
+    } catch {
+      setActionError(t("roomies.debtUpdateError"));
+    } finally {
+      setSending(false);
+    }
+  };
+  const time = new Date(item.created_at).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+  if (item.type.startsWith("group_expense_") && groupExpense) return <GroupExpenseCard expense={groupExpense} item={item} names={names} actor={actor} userId={userId} reload={reload}/>;
+  if (event && activityStyle) return <article className="theme-card relative w-fit min-w-[min(13rem,78%)] max-w-[88%] overflow-hidden rounded-2xl border bg-white px-3 py-2.5 shadow-sm md:max-w-[68%]" style={{ borderColor: `${activityStyle.accent}44` }}>
+    <span className="absolute inset-y-0 left-0 w-0.5" style={{ backgroundColor: activityStyle.accent }}/>
+    <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 pl-0.5 text-sm leading-snug">
+      <span className="shrink-0 text-base">{activityStyle.icon}</span>
+      <b className="break-words">{product}</b>
+      <span className="text-[#839087]">·</span>
+      <span className="text-xs font-bold" style={{ color: activityStyle.accent }}>{activityStatus}</span>
+    </div>
+    <p className="mt-1 break-words pl-0.5 text-xs leading-snug text-[#718078]">{activityDetail} <span className="text-[#839087]">· {time}</span></p>
+    {item.type === "product_request" && item.user_id !== userId && <button type="button" disabled={sending} onClick={() => void answer()} className="mt-3 min-h-10 rounded-xl bg-[#e3f2e9] px-4 text-sm font-bold text-[#176b46] disabled:opacity-50">{t("roomies.activity.iHaveIt")}</button>}
+    {item.type === "product_taken" && debt?.status === "pending" && debt.debtor_user_id === userId && <button type="button" disabled={sending} onClick={() => void updateReplacement("report")} className="mt-3 min-h-10 w-full rounded-xl bg-[#176b46] px-4 text-sm font-bold text-white disabled:opacity-50">{t("roomies.replaced")}</button>}
+    {item.type === "replacement_reported" && debt?.status === "awaiting_confirmation" && debt.owner_user_id === userId && <div className="mt-3 grid grid-cols-2 gap-2"><button type="button" disabled={sending} onClick={() => void updateReplacement("confirm")} className="min-h-10 rounded-xl bg-[#176b46] px-2 text-sm font-bold text-white disabled:opacity-50">{t("roomies.replacedByOther")}</button><button type="button" disabled={sending} onClick={() => void updateReplacement("reject")} className="theme-card min-h-10 rounded-xl border border-black/10 bg-white px-2 text-sm font-bold disabled:opacity-50">{t("roomies.notYet")}</button></div>}
+    {actionError && <p role="alert" className="mt-2 text-xs font-semibold text-red-600">{actionError}</p>}
   </article>;
+  return <div className={`flex ${mine ? "justify-end" : "justify-start"}`}>
+    <article className={`${mine ? "bg-[#176b46] text-white" : "theme-card bg-white"} w-fit min-w-[min(140px,70vw)] max-w-[82%] rounded-2xl px-4 py-3 shadow-sm md:max-w-[65%]`}>
+      <p className={`break-words text-xs font-bold ${mine ? "text-white/70" : "text-[#176b46]"}`}>{actor}</p>
+      <p data-i18n-ignore className="mt-1 whitespace-pre-wrap break-words text-sm leading-relaxed">{text}</p>
+      <time className={`ml-auto mt-1 block w-fit text-[11px] ${mine ? "text-white/55" : "text-[#839087]"}`}>{time}</time>
+    </article>
+  </div>;
 }
 
-function eventLabel(type: RoomieMessage["type"], actor: string) {
-  if (type === "product_request") return `🔎 ${actor} pregunta`;
-  if (type === "product_available") return "✅ Producto disponible";
-  if (type === "product_taken") return "🥛 Producto tomado";
-  if (type === "product_purchased") return "🛒 Compra compartida";
-  if (type === "replacement_reported") return "⏳ Reposición reportada";
-  if (type === "replacement_confirmed") return "✅ Reposición confirmada";
-  return "Reposición pendiente";
+const formatGroupAmount = (amount: number, currency: Currency) => formatCurrency(amount, currency);
+
+function GroupExpenseCard({ expense, item, names, actor, userId, reload }: { expense: GroupExpense; item: RoomieMessage; names: Map<string, string>; actor: string; userId: string; reload: () => Promise<void> }) {
+  const { t, count } = useI18n();
+  const [busy, setBusy] = useState("");
+  const [error, setError] = useState("");
+  const payer = names.get(expense.payer_id) || t("roomies.member");
+  const myShare = expense.group_expense_shares.find((share) => share.user_id === userId);
+  const reported = expense.group_expense_shares.filter((share) => share.status === "reported_paid");
+  const time = new Date(item.created_at).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+  const update = async (participantId: string, operation: "report" | "confirm" | "reject") => {
+    setBusy(participantId + operation); setError("");
+    try { const messageId = await updateGroupExpensePayment(expense.id, participantId, operation); await notifyRoomieEvent(messageId); await reload(); }
+    catch { setError(t("roomies.groupExpense.updateError")); }
+    finally { setBusy(""); }
+  };
+  if (item.type !== "group_expense_created") {
+    const participantId = String(item.metadata.participantUserId || "");
+    const participant = names.get(participantId) || actor;
+    const rejected = item.metadata.operation === "reject";
+    return <article className="theme-card w-fit max-w-[88%] rounded-2xl border border-[#A1DBEE]/30 bg-white px-3 py-2.5 shadow-sm md:max-w-[68%]"><p className="text-sm font-bold">{item.type === "group_expense_payment_confirmed" ? "✅" : rejected ? "↩️" : "⏳"} {expense.concept}</p><p className="mt-1 text-xs text-[#718078]">{t(item.type === "group_expense_payment_confirmed" ? "roomies.groupExpense.paymentConfirmedEvent" : rejected ? "roomies.groupExpense.paymentRejectedEvent" : "roomies.groupExpense.paymentReportedEvent", { participant })} · {time}</p></article>;
+  }
+  const statusKey = expense.status === "paid" ? "paid" : expense.status === "partially_paid" ? "partiallyPaid" : expense.status === "cancelled" ? "cancelled" : "pending";
+  return <details className="theme-card group w-full max-w-[94%] overflow-hidden rounded-[24px] border border-[#A1DBEE]/30 bg-white shadow-sm md:max-w-[78%]">
+    <summary className="cursor-pointer list-none p-4 [&::-webkit-details-marker]:hidden">
+      <div className="flex items-center justify-between gap-3"><span className="rounded-full bg-[#A1DBEE]/15 px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wide text-[#5aa8c4]">{t("roomies.groupExpense.cardLabel")}</span><span className="text-[11px] text-[#839087]">{time}</span></div>
+      <strong className="mt-3 block text-3xl tracking-[-.04em]">{formatGroupAmount(Number(expense.total_amount), expense.currency)}</strong>
+      <h3 className="mt-1 text-base font-bold">{expense.concept}</h3>
+      <p className="mt-1 text-sm text-[#718078]">{t("roomies.groupExpense.paidBy", { payer })} · {count("roomies.groupExpense.roomies", expense.group_expense_shares.length)}</p>
+      <span className="mt-3 inline-flex rounded-full bg-amber-400/15 px-2.5 py-1 text-[10px] font-extrabold uppercase text-amber-600">{t(`roomies.groupExpense.${statusKey}`)}</span>
+    </summary>
+    <div className="border-t border-black/[.06] px-4 pb-4 pt-3">
+      <div className="space-y-2">{expense.group_expense_shares.map((share) => <div key={share.id} className="flex items-center gap-2 text-sm"><span className="min-w-0 flex-1 truncate">{names.get(share.user_id) || t("roomies.member")}</span><b>{formatGroupAmount(Number(share.amount), expense.currency)}</b><small className="rounded-full bg-black/[.045] px-2 py-1 text-[10px] font-bold text-[#718078]">{t(`roomies.groupExpense.share.${share.status}`)}</small></div>)}</div>
+      {myShare?.status === "pending" && <button type="button" disabled={Boolean(busy)} onClick={() => void update(userId, "report")} className="mt-4 min-h-11 w-full rounded-xl bg-[#176b46] px-3 text-sm font-bold text-white disabled:opacity-50">{t("roomies.groupExpense.markPaid")}</button>}
+      {expense.payer_id === userId && reported.map((share) => <div key={share.id} className="mt-4"><p className="mb-2 text-xs font-bold">{t("roomies.groupExpense.confirmHint", { participant: names.get(share.user_id) || t("roomies.member") })}</p><div className="grid grid-cols-2 gap-2"><button type="button" disabled={Boolean(busy)} onClick={() => void update(share.user_id, "confirm")} className="min-h-10 rounded-xl bg-[#176b46] px-2 text-sm font-bold text-white">{t("roomies.groupExpense.confirm")}</button><button type="button" disabled={Boolean(busy)} onClick={() => void update(share.user_id, "reject")} className="theme-card min-h-10 rounded-xl border border-black/10 bg-white px-2 text-sm font-bold">{t("roomies.notYet")}</button></div></div>)}
+      {error && <p role="alert" className="mt-3 text-xs font-semibold text-red-600">{error}</p>}
+    </div>
+  </details>;
 }
 
 function DebtsView({ userId, data, reload }: { userId: string; data: RoomiesData; reload: () => Promise<void> }) {
@@ -248,7 +402,14 @@ function DebtsView({ userId, data, reload }: { userId: string; data: RoomiesData
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const names = new Map(data.members.map((member) => [member.user_id, member.display_name]));
-  const debts = data.debts.filter((debt) => resolved ? debt.status === "resolved" : debt.status !== "resolved");
+  const debts = data.debts.filter((debt) =>
+    (debt.debtor_user_id === userId || debt.owner_user_id === userId) &&
+    (resolved ? debt.status === "resolved" : debt.status !== "resolved"),
+  );
+  const paymentExpenses = data.groupExpenses.filter((expense) =>
+    (expense.payer_id === userId || expense.group_expense_shares.some((share) => share.user_id === userId)) &&
+    (resolved ? expense.status === "paid" : expense.status !== "paid" && expense.status !== "cancelled"),
+  );
   const act = async (debt: ReplacementDebt, operation: "report" | "confirm" | "reject") => {
     setBusy(debt.id + operation); setError("");
     try { const messageId = await updateDebt(debt.id, operation); await notifyRoomieEvent(messageId); await reload(); }
@@ -259,9 +420,10 @@ function DebtsView({ userId, data, reload }: { userId: string; data: RoomiesData
     <div className="mt-4 flex gap-2"><button type="button" onClick={() => setResolved(false)} className={`min-h-10 rounded-full px-4 text-sm font-bold ${!resolved ? "bg-[#176b46] text-white" : "theme-card bg-white text-[#718078]"}`}>{t("roomies.active")}</button><button type="button" onClick={() => setResolved(true)} className={`min-h-10 rounded-full px-4 text-sm font-bold ${resolved ? "bg-[#176b46] text-white" : "theme-card bg-white text-[#718078]"}`}>{t("roomies.resolved")}</button></div>
     {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
     <div className="mt-4 space-y-3">
-      {debts.length === 0 && (
+      {debts.length === 0 && paymentExpenses.length === 0 && (
         <Empty icon={<PackageCheck/>} title={resolved ? t("roomies.noResolved") : t("roomies.allGood")} text={resolved ? t("roomies.resolvedHistory") : t("roomies.noPendingProducts")}/>
       )}
+      {paymentExpenses.map((expense) => { const message = data.messages.find((item) => item.type === "group_expense_created" && item.metadata.expenseId === expense.id); return message ? <GroupExpenseCard key={expense.id} expense={expense} item={message} names={names} actor={names.get(message.user_id) || t("roomies.member")} userId={userId} reload={reload}/> : null; })}
       {debts.map((debt) => <article key={debt.id} className="theme-card rounded-[22px] border border-black/[.06] bg-white p-4 shadow-sm">
         <div className="flex items-start gap-3"><div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-[#e3f2e9] text-[#176b46]">🥛</div><div className="min-w-0 flex-1"><h3 className="font-bold">{debt.product_name}</h3><p className="text-sm text-[#718078]">{names.get(debt.debtor_user_id)} → {names.get(debt.owner_user_id)}</p></div></div>
         <p className="mt-3 text-sm font-semibold text-[#176b46]">{debt.status === "pending" ? t("roomies.pendingReplacement") : debt.status === "awaiting_confirmation" ? t("roomies.waiting", { name: names.get(debt.owner_user_id) || "" }) : t("roomies.resolved")}</p>
@@ -273,15 +435,56 @@ function DebtsView({ userId, data, reload }: { userId: string; data: RoomiesData
   </div>;
 }
 
-function RoomieSheet({ sheet, close, next, household, members, debts, userId, completed }: { sheet: Sheet; close: () => void; next: (sheet: Sheet) => void; household: Household; members: HouseholdMember[]; debts: ReplacementDebt[]; userId: string; completed: () => Promise<void> }) {
+function RoomieSheet({ sheet, close, next, household, members, debts, userId, currency, completed }: { sheet: Sheet; close: () => void; next: (sheet: Sheet) => void; household: Household; members: HouseholdMember[]; debts: ReplacementDebt[]; userId: string; currency: Currency; completed: () => Promise<void> }) {
   const { t } = useI18n();
   if (sheet === "household") return <HouseholdMenu household={household} members={members} userId={userId} close={close} completed={completed}/>;
   if (sheet === "actions") return <SheetFrame title={t("roomies.actions")} close={close}>
     <Action icon={<Search/>} label={t("roomies.ask")} click={() => next("request")}/>
     <Action icon={<PackageCheck/>} label={t("roomies.taken")} click={() => next("taken")}/>
     <Action icon={<ShoppingCart/>} label={t("roomies.purchased")} click={() => next("purchased")}/>
+    <Action icon={<CircleDollarSign/>} label={t("roomies.groupExpense.action")} click={() => next("groupExpense")}/>
   </SheetFrame>;
+  if (sheet === "groupExpense") return <GroupExpenseForm close={close} household={household} members={members} userId={userId} currency={currency} completed={completed}/>;
   return <EventForm kind={sheet as "request" | "taken" | "purchased"} close={close} household={household} members={members} debts={debts} userId={userId} completed={completed}/>;
+}
+
+function GroupExpenseForm({ close, household, members, userId, currency, completed }: { close: () => void; household: Household; members: HouseholdMember[]; userId: string; currency: Currency; completed: () => Promise<void> }) {
+  const { t } = useI18n();
+  const others = members.filter((member) => member.user_id !== userId);
+  const [amount, setAmount] = useState("");
+  const [concept, setConcept] = useState("");
+  const [selected, setSelected] = useState<string[]>(others.map((member) => member.user_id));
+  const [mode, setMode] = useState<"equal" | "custom">("equal");
+  const [custom, setCustom] = useState<Record<string, string>>({});
+  const [category, setCategory] = useState("");
+  const [notes, setNotes] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const total = Number(amount);
+  const toggle = (id: string) => setSelected((current) => current.includes(id) ? current.filter((value) => value !== id) : [...current, id]);
+  const submit = async () => {
+    if (!concept.trim() || !Number.isFinite(total) || total <= 0 || selected.length === 0 || saving) return;
+    let shares: Array<{ userId: string; amount: number }>;
+    try { shares = buildExpenseShares(total, selected, mode === "custom" ? Object.fromEntries(selected.map((id) => [id, Number(custom[id] || 0)])) : undefined); }
+    catch { setError(t("roomies.groupExpense.splitError")); return; }
+    setSaving(true); setError("");
+    try {
+      const messageId = await createGroupExpense({ householdId: household.id, concept, totalAmount: total, currency, category, notes, shares });
+      await notifyRoomieEvent(messageId);
+      await completed();
+    } catch { setError(t("roomies.groupExpense.createError")); setSaving(false); }
+  };
+  return <SheetFrame close={close} title={t("roomies.groupExpense.title")}>
+    <label className="block text-sm font-bold">{t("roomies.groupExpense.amount")}</label><input autoFocus inputMode="decimal" value={amount} onChange={(event) => setAmount(event.target.value)} placeholder="$0" className="theme-card mt-2 min-h-14 w-full rounded-2xl border border-black/10 bg-white px-4 text-xl font-bold outline-none focus:border-[#176b46]"/>
+    <label className="mt-4 block text-sm font-bold">{t("roomies.groupExpense.concept")}</label><input value={concept} onChange={(event) => setConcept(event.target.value)} maxLength={100} className="theme-card mt-2 min-h-14 w-full rounded-2xl border border-black/10 bg-white px-4 outline-none focus:border-[#176b46]"/>
+    <p className="mt-4 text-sm font-bold">{t("roomies.groupExpense.chargeTo")}</p><div className="mt-2 flex flex-wrap gap-2">{others.map((member) => <button key={member.user_id} type="button" onClick={() => toggle(member.user_id)} className={`min-h-10 rounded-full border px-3 text-sm font-bold ${selected.includes(member.user_id) ? "border-[#176b46] bg-[#e3f2e9] text-[#176b46]" : "theme-card border-black/10 bg-white"}`}>{selected.includes(member.user_id) && <Check className="mr-1 inline" size={14}/>} {member.display_name}</button>)}</div>
+    <p className="mt-4 text-sm font-bold">{t("roomies.groupExpense.split")}</p><div className="mt-2 grid grid-cols-2 gap-2"><Choice selected={mode === "equal"} label={t("roomies.groupExpense.equal")} click={() => setMode("equal")}/><Choice selected={mode === "custom"} label={t("roomies.groupExpense.custom")} click={() => setMode("custom")}/></div>
+    {mode === "custom" && <div className="mt-3 space-y-2">{selected.map((id) => <label key={id} className="flex items-center gap-3 text-sm"><span className="min-w-0 flex-1 truncate">{members.find((member) => member.user_id === id)?.display_name}</span><input inputMode="decimal" value={custom[id] || ""} onChange={(event) => setCustom((current) => ({ ...current, [id]: event.target.value }))} placeholder="$0" className="theme-card h-11 w-28 rounded-xl border border-black/10 bg-white px-3 text-right outline-none"/></label>)}</div>}
+    <label className="mt-4 block text-sm font-bold">{t("roomies.groupExpense.category")}</label><select value={category} onChange={(event) => setCategory(event.target.value)} className="theme-card mt-2 min-h-12 w-full rounded-xl border border-black/10 bg-white px-3"><option value="">{t("roomies.groupExpense.noCategory")}</option>{groupExpenseCategories.map((value) => <option key={value} value={value}>{t(`roomies.groupExpense.category.${value}`)}</option>)}</select>
+    <label className="mt-4 block text-sm font-bold">{t("roomies.groupExpense.notes")}</label><textarea value={notes} onChange={(event) => setNotes(event.target.value)} maxLength={500} rows={2} className="theme-card mt-2 w-full resize-none rounded-2xl border border-black/10 bg-white p-3 outline-none"/>
+    {error && <p role="alert" className="mt-3 text-sm text-red-600">{error}</p>}
+    <button type="button" disabled={saving || !concept.trim() || total <= 0 || selected.length === 0} onClick={() => void submit()} className="mt-5 flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-[#176b46] font-bold text-white disabled:opacity-50">{saving && <LoaderCircle className="animate-spin" size={18}/>} {t("roomies.groupExpense.create")}</button>
+  </SheetFrame>;
 }
 
 function HouseholdMenu({ household, members, userId, close, completed }: { household: Household; members: HouseholdMember[]; userId: string; close: () => void; completed: () => Promise<void> }) {

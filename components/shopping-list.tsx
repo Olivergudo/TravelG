@@ -4,11 +4,13 @@ import { Check, ChevronLeft, Circle, ListChecks, LoaderCircle, Pencil, Plus, Tra
 import { useRef, useState } from "react";
 import type { AppData, ShoppingListItem } from "@/lib/types";
 import { useI18n } from "@/lib/i18n";
+import type { RoomieObligations } from "@/lib/roomies/types";
+import { ReplacementShoppingSection } from "./roomie-obligations";
 
 type Update = (fn: (data: AppData) => AppData) => void;
 const uid = () => globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
-export function ShoppingList({ data, update, showFridge }: { data: AppData; update: Update; showFridge: () => void }) {
+export function ShoppingList({ data, update, showFridge, userId, obligations, reloadObligations, openRoomies }: { data: AppData; update: Update; showFridge: () => void; userId: string; obligations: RoomieObligations; reloadObligations: () => Promise<void>; openRoomies: () => void }) {
   const { t, count } = useI18n();
   const [name, setName] = useState("");
   const [editingItem, setEditingItem] = useState<ShoppingListItem>();
@@ -43,7 +45,7 @@ export function ShoppingList({ data, update, showFridge }: { data: AppData; upda
       : item),
   }));
   const clearCompleted = () => {
-    if (completed.length > 1 && !window.confirm(`¿Eliminar ${completed.length} productos completados?`)) return;
+    if (completed.length > 1 && !window.confirm(t("list.clearConfirm", { count: completed.length }))) return;
     update((current) => ({ ...current, shoppingListItems: current.shoppingListItems.filter((item) => !item.completed) }));
   };
 
@@ -57,8 +59,9 @@ export function ShoppingList({ data, update, showFridge }: { data: AppData; upda
     <div className="space-y-7 px-4">
       <form onSubmit={add} className="theme-card flex min-w-0 gap-2 rounded-2xl border border-black/[.04] bg-white p-2 shadow-sm">
         <input ref={input} value={name} onChange={(event) => setName(event.target.value)} enterKeyHint="done" placeholder={t("list.addPlaceholder")} aria-label={t("list.addPlaceholder")} className="min-h-12 min-w-0 flex-1 bg-transparent px-3 outline-none" />
-        <button type="submit" aria-label="Agregar producto" className="tap grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-[#176b46] text-white"><Plus size={23}/></button>
+        <button type="submit" aria-label={t("fridge.addProduct")} className="tap grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-[#176b46] text-white"><Plus size={23}/></button>
       </form>
+      <ReplacementShoppingSection data={obligations} userId={userId} reload={reloadObligations} openRoomies={openRoomies}/>
       {!data.shoppingListItems.length && (
         <section className="theme-card rounded-[28px] border border-black/[.04] bg-white px-6 py-10 text-center">
           <ListChecks className="mx-auto text-[#91a098]" size={38}/>

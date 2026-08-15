@@ -3,6 +3,8 @@ import test from "node:test";
 import { classifyTicketProduct, extractTicketQuantity, normalizeTicketProductName } from "../index";
 import { getFoodFilterCategory, getFoodVisual } from "../../fridge/emoji";
 import { findPossibleDuplicateProduct, normalizeProductName } from "../../fridge/duplicates";
+import { ingredientsMatch, splitRecipeIngredients } from "../../recipes/ingredients";
+import { normalizeCategoryRuleName, resolveProductCategory } from "../../fridge/category";
 import { parseRecipeGenerationResult, parseRecipeResponse } from "../../recipes/types";
 import { canUseFeature } from "../../features/plans";
 import { recipeFingerprint } from "../../recipes/saved-types";
@@ -66,6 +68,17 @@ test("agrupa categorías visuales para filtros del refrigerador", () => {
   assert.equal(getFoodFilterCategory("Producto misterioso"), "other");
 });
 
+test("prioriza categoría manual, luego regla aprendida y finalmente diccionario", () => {
+  const base = { name: "Yahualica" };
+  const rules = [{ normalizedName: "yahualica", category: "seasoning" as const }];
+  assert.equal(resolveProductCategory(base, []), "other");
+  assert.equal(resolveProductCategory(base, rules), "seasoning");
+  assert.equal(resolveProductCategory({ ...base, customCategory: "dairy" }, rules), "dairy");
+  assert.equal(resolveProductCategory({ name: "Manzana" }, []), "produce");
+  assert.equal(normalizeCategoryRuleName("  YAHUÁLICA  "), "yahualica");
+  assert.notEqual(normalizeCategoryRuleName("sal"), normalizeCategoryRuleName("salmón"));
+});
+
 test("detecta solo duplicados claros del refrigerador", () => {
   const base = { id: "1", userId: "u", name: "Mayonesa", createdAt: "", updatedAt: "" };
   assert.equal(normalizeProductName("  ORÉGANO  "), "oregano");
@@ -85,6 +98,18 @@ test("normaliza respuestas nuevas y anteriores de recetas", () => {
   const recipe = { title: "Arroz", description: "Simple", estimatedMinutes: 10, ingredients: ["Arroz"], missingIngredients: [], steps: ["Cocinar"] };
   for (const count of [1, 2, 3]) assert.equal(parseRecipeResponse({ suggestions: Array.from({ length: count }, () => recipe) }).suggestions.length, count);
   assert.deepEqual(parseRecipeGenerationResult({ status: "insufficient_ingredients", suggestions: [] }), { status: "insufficient_ingredients", suggestions: [] });
+});
+
+test("compara ingredientes de recetas localmente con singularización y aliases", () => {
+  assert.equal(ingredientsMatch("tomates", "Tomate"), true);
+  assert.equal(ingredientsMatch("cebollas", "cebolla"), true);
+  assert.equal(ingredientsMatch("huevo", "Huevos"), true);
+  assert.equal(ingredientsMatch("leche entera", "leche"), true);
+  assert.equal(ingredientsMatch("jitomates", "tomate"), true);
+  assert.deepEqual(
+    splitRecipeIngredients(["Tomates", "Crema"], [{ name: "tomate" }]),
+    { available: ["Tomates"], missing: ["Crema"] },
+  );
 });
 
 test("Basic puede usar refrigerador pero no cocinar ni escanear", () => {

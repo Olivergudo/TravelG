@@ -52,6 +52,25 @@ export async function POST(request: Request) {
     title = `✅ ${actor} confirmó la reposición`;
     body = product;
     url = "/?tab=roomies&view=resolved";
+  } else if (message.type === "group_expense_created") {
+    const expenseId = String(metadata.expenseId || "");
+    const { data: shares } = await service.from("group_expense_shares").select("user_id").eq("expense_id", expenseId);
+    recipients = (shares || []).map((share) => share.user_id);
+    title = `💸 ${actor} agregó una cuenta`;
+    body = String(metadata.concept || "Gasto grupal");
+    url = "/?tab=roomies&view=pending";
+  } else if (message.type === "group_expense_payment_reported") {
+    const expenseId = String(metadata.expenseId || "");
+    const { data: expense } = await service.from("group_expenses").select("payer_id").eq("id", expenseId).single();
+    recipients = expense?.payer_id ? [expense.payer_id] : [];
+    title = `⏳ ${actor} reportó un pago`;
+    body = String(metadata.concept || "Gasto grupal");
+    url = "/?tab=roomies&view=pending";
+  } else if (message.type === "group_expense_payment_confirmed") {
+    recipients = metadata.participantUserId ? [String(metadata.participantUserId)] : [];
+    title = `✅ ${actor} confirmó tu pago`;
+    body = String(metadata.concept || "Gasto grupal");
+    url = "/?tab=roomies&view=resolved";
   } else {
     return Response.json({ ok: true, delivered: 0 });
   }

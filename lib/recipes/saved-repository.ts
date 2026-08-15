@@ -6,17 +6,25 @@ import { recipeFingerprint, type SavedRecipe } from "./saved-types";
 
 const cacheKey = (userId: string) => `gasto-listo-saved-recipes-v1:${userId}`;
 const readLocal = (userId: string): SavedRecipe[] => {
-  try { return JSON.parse(localStorage.getItem(cacheKey(userId)) || "[]") as SavedRecipe[]; } catch { return []; }
+  try {
+    const recipes = JSON.parse(localStorage.getItem(cacheKey(userId)) || "[]") as SavedRecipe[];
+    return recipes.map((recipe) => ({ ...recipe, optionalIngredients: recipe.optionalIngredients ?? [] }));
+  } catch { return []; }
 };
 const cache = (userId: string, recipes: SavedRecipe[]) => localStorage.setItem(cacheKey(userId), JSON.stringify(recipes));
-const fromRow = (row: Record<string, unknown>): SavedRecipe => ({
+const fromRow = (row: Record<string, unknown>): SavedRecipe => {
+  const extras = row.extra_ingredients;
+  const extraData = extras && !Array.isArray(extras) && typeof extras === "object" ? extras as Record<string, unknown> : {};
+  return ({
   id: String(row.id), userId: String(row.user_id), fingerprint: String(row.fingerprint),
   title: String(row.name), description: String(row.description), reason: String(row.reason || ""),
   estimatedMinutes: row.estimated_minutes == null ? null : Number(row.estimated_minutes),
   ingredients: Array.isArray(row.ingredients_used) ? row.ingredients_used.map(String) : [],
-  missingIngredients: Array.isArray(row.extra_ingredients) ? row.extra_ingredients.map(String) : [],
+  missingIngredients: Array.isArray(extras) ? extras.map(String) : Array.isArray(extraData.missingIngredients) ? extraData.missingIngredients.map(String) : [],
+  optionalIngredients: Array.isArray(extraData.optionalIngredients) ? extraData.optionalIngredients.map(String) : [],
   steps: Array.isArray(row.steps) ? row.steps.map(String) : [], createdAt: String(row.created_at),
-});
+  });
+};
 
 export const savedRecipeRepository = {
   local: readLocal,
@@ -32,7 +40,7 @@ export const savedRecipeRepository = {
     if (existing) return { recipes: current, saved: existing };
     const saved: SavedRecipe = { ...recipe, id: crypto.randomUUID(), userId, fingerprint, createdAt: new Date().toISOString() };
     const recipes = [saved, ...current]; cache(userId, recipes);
-    if (supabase) await supabase.from("saved_recipes").upsert({ id: saved.id, user_id: userId, fingerprint, name: saved.title, description: saved.description, estimated_minutes: saved.estimatedMinutes, reason: saved.reason, ingredients_used: saved.ingredients, extra_ingredients: saved.missingIngredients, steps: saved.steps, created_at: saved.createdAt }, { onConflict: "user_id,fingerprint" });
+    if (supabase) await supabase.from("saved_recipes").upsert({ id: saved.id, user_id: userId, fingerprint, name: saved.title, description: saved.description, estimated_minutes: saved.estimatedMinutes, reason: saved.reason, ingredients_used: saved.ingredients, extra_ingredients: { missingIngredients: saved.missingIngredients, optionalIngredients: saved.optionalIngredients ?? [] }, steps: saved.steps, created_at: saved.createdAt }, { onConflict: "user_id,fingerprint" });
     return { recipes, saved };
   },
   async remove(userId: string, id: string, current: SavedRecipe[]) {

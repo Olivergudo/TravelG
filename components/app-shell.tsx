@@ -38,6 +38,10 @@ import { formatCurrency, isCurrency, type Currency } from "@/lib/currency";
 import { requiredPreferences } from "@/lib/user-preferences";
 import { RoomiesScreen } from "./roomies-screen";
 import { I18nProvider, isAppLanguage, translate, useI18n, type AppLanguage } from "@/lib/i18n";
+import { useRoomieObligations } from "@/hooks/use-roomie-obligations";
+import { roomieAttentionCount } from "@/lib/roomies/obligations";
+import type { RoomieObligations } from "@/lib/roomies/types";
+import { FinancialObligationsSection } from "./roomie-obligations";
 
 type MainTab = "finances" | "list" | "fridge" | "roomies" | "shopping";
 
@@ -51,7 +55,8 @@ export function AppShell() {
     const requested = new URLSearchParams(window.location.search).get("tab");
     return requested === "roomies" ? "roomies" : requested === "purchases" ? "shopping" : requested === "list" ? "list" : "finances";
   });
-  const [roomiesAttention, setRoomiesAttention] = useState(0);
+  const [roomiesScreenAttention, setRoomiesScreenAttention] = useState(0);
+  const roomieObligations = useRoomieObligations(authUser?.id);
   const [language, setLanguage] = useState<AppLanguage>(() => {
     if (typeof window === "undefined") return "es";
     const cached = localStorage.getItem("gasto-listo-language-last");
@@ -161,27 +166,7 @@ export function AppShell() {
     document.documentElement.lang = language;
     localStorage.setItem("gasto-listo-language-last", language);
   }, [language]);
-  useEffect(() => {
-    if (!supabase || !authUser) return;
-    let active = true;
-    const refreshAttention = async () => {
-      const { data: debts } = await supabase!
-        .from("replacement_debts")
-        .select("debtor_user_id,owner_user_id,status")
-        .in("status", ["pending", "awaiting_confirmation"]);
-      if (!active || !debts) return;
-      setRoomiesAttention(debts.filter((debt) =>
-        (debt.debtor_user_id === authUser.id && debt.status === "pending") ||
-        (debt.owner_user_id === authUser.id && debt.status === "awaiting_confirmation"),
-      ).length);
-    };
-    queueMicrotask(() => void refreshAttention());
-    const channel = supabase
-      .channel(`roomies-attention:${authUser.id}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "replacement_debts" }, () => void refreshAttention())
-      .subscribe();
-    return () => { active = false; void supabase?.removeChannel(channel); };
-  }, [authUser]);
+  const roomiesAttention = authUser ? Math.max(roomiesScreenAttention, roomieAttentionCount(roomieObligations.data, authUser.id)) : 0;
   if (!authReady || (authUser && (!ready || !planReady)))
     return (
       <I18nProvider language={language}>
@@ -218,9 +203,14 @@ export function AppShell() {
             setAuthUser(user);
           }}
           openPurchases={openPurchases}
+          manageCategories={() => setManagingCategories(true)}
+          userId={authUser!.id}
+          obligations={roomieObligations.data}
+          reloadObligations={roomieObligations.reload}
+          openRoomies={() => selectTab("roomies")}
         />
       ) : tab === "list" ? (
-        <ShoppingList data={data} update={update} showFridge={() => selectTab("fridge")} />
+        <ShoppingList data={data} update={update} showFridge={() => selectTab("fridge")} userId={authUser!.id} obligations={roomieObligations.data} reloadObligations={roomieObligations.reload} openRoomies={() => selectTab("roomies")} />
       ) : tab === "fridge" && authUser ? (
         <FridgeScreen
           userId={authUser.id}
@@ -231,7 +221,7 @@ export function AppShell() {
           openShoppingList={openShoppingList}
         />
       ) : tab === "roomies" && authUser ? (
-        <RoomiesScreen userId={authUser.id} onAttentionChange={setRoomiesAttention} />
+        <RoomiesScreen userId={authUser.id} currency={currency} onAttentionChange={setRoomiesScreenAttention} />
       ) : (
         <ShoppingV2
           data={data}
@@ -241,7 +231,7 @@ export function AppShell() {
         />
       )}
       <nav
-        aria-label="Navegación principal"
+        aria-label={translate(language, "nav.main")}
         className={`bottom-nav fixed inset-x-0 bottom-0 z-30 mx-auto grid w-full min-w-0 max-w-2xl ${hasFridge ? "grid-cols-3" : "grid-cols-2"} border-t border-black/[.06] bg-white/95 px-1 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl`}
       >
         <Nav
@@ -269,7 +259,7 @@ export function AppShell() {
           <button
             type="button"
             onClick={() => setAddingExpense(true)}
-            aria-label="Nuevo gasto"
+            aria-label={translate(language, "expense.new")}
             className="tap absolute left-1/2 -top-7 grid h-14 w-14 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-[20px] border-4 border-[#f3f6f3] bg-[#176b46] text-white shadow-[0_8px_22px_rgba(23,107,70,.32)] transition-transform duration-150"
           >
             <Plus size={30} strokeWidth={2.5} />
@@ -325,7 +315,7 @@ export function AppShell() {
           role="status"
           className="fixed bottom-[calc(5.75rem+env(safe-area-inset-bottom))] left-1/2 z-[60] -translate-x-1/2 rounded-full bg-[#173d2d] px-4 py-2 text-sm font-semibold text-white shadow-lg"
         >
-          Gasto guardado
+          {translate(language, "expense.saved")}
         </div>
       )}
       {(needsLanguage || needsName || needsCurrency) && authUser && (
@@ -453,6 +443,11 @@ function Finances({
   theme,
   preferencesChanged,
   openPurchases,
+  manageCategories,
+  userId,
+  obligations,
+  reloadObligations,
+  openRoomies,
 }: {
   data: AppData;
   reload: () => Promise<void>;
@@ -463,6 +458,11 @@ function Finances({
   theme: "light" | "dark";
   preferencesChanged: (user: User) => void;
   openPurchases: () => void;
+  manageCategories: () => void;
+  userId: string;
+  obligations: RoomieObligations;
+  reloadObligations: () => Promise<void>;
+  openRoomies: () => void;
 }) {
   const { t, count, formatDate, language } = useI18n();
   const today = new Date();
@@ -527,11 +527,13 @@ function Finances({
         </div>
       </section>
       <div className="mt-5 w-full min-w-0 max-w-full space-y-6 px-4">
+        <FinancialObligationsSection data={obligations} userId={userId} reload={reloadObligations} openRoomies={openRoomies}/>
         <FinanceCharts
           expenses={month}
           categories={data.categories}
           total={total}
           currency={currency}
+          manageCategories={manageCategories}
         />
         <section className="min-w-0">
           <div className="mb-3 flex items-end justify-between gap-3 px-1">

@@ -37,6 +37,7 @@ create table if not exists public.fridge_items (
   name text not null,
   quantity numeric,
   unit text,
+  custom_category text check (custom_category is null or custom_category in ('produce','meat','dairy','bakery','seasoning','drink','other')),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   primary key (user_id, id)

@@ -1,9 +1,9 @@
 import type { AppData, Category, Purchase, PurchaseItem, ShoppingListItem } from "./types";
 import { isSupabaseConfigured, supabase } from "./supabase";
-import { getCategoryColor, knownCategoryColors } from "./category-colors";
+import { getDefaultCategoryColor, migrateCategoryColor } from "./category-colors";
 const KEY = "gasto-listo-data-v1";
 export const userDataCacheKey = (userId: string) => `${KEY}:${userId}`;
-export const defaultCategories = [
+const legacyDefaultCategories = [
   { id: "supermarket", name: "Supermercado", color: "#1F8A5B", icon: "🛒" },
   { id: "transport", name: "Transporte", color: "#317A78", icon: "🚗" },
   { id: "restaurant", name: "Restaurante", color: "#268C82", icon: "🍽️" },
@@ -19,6 +19,10 @@ export const defaultCategories = [
   { id: "health", name: "Salud", color: "#55A995", icon: "💊" },
   { id: "other", name: "Otro", color: "#7D8983", icon: "•••" },
 ];
+export const defaultCategories = legacyDefaultCategories.map((category) => ({
+  ...category,
+  color: getDefaultCategoryColor(category.id),
+}));
 const categories = defaultCategories;
 export const emptyData: AppData = {
   schemaVersion: 3,
@@ -84,7 +88,7 @@ function migrate(value: unknown): AppData {
         const category = value as Category;
         return {
           ...category,
-          color: knownCategoryColors[category.id] || getCategoryColor(category),
+          color: migrateCategoryColor(category),
           name: category.name || "",
           emoji: category.emoji || category.icon || "💸",
           icon: category.emoji || category.icon || "💸",
@@ -105,7 +109,7 @@ function migrate(value: unknown): AppData {
     const mergedCategories = [
       ...defaultCategories,
       ...existing.filter((c) => !defaultCategories.some((d) => d.id === c.id)),
-    ].map((category) => ({ ...category, color: knownCategoryColors[category.id] || getCategoryColor(category) }));
+    ].map((category) => ({ ...category, color: migrateCategoryColor(category) }));
     const categoryMap: Record<string, string> = {
       food: "supermarket",
       fun: "entertainment",

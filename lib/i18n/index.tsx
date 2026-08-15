@@ -13,7 +13,10 @@ export const intlLocales: Record<AppLanguage, string> = { es: "es-CL", en: "en-U
 const dictionaries = { es, en, fr, de };
 export function isAppLanguage(value: unknown): value is AppLanguage { return typeof value === "string" && supportedLanguages.includes(value as AppLanguage); }
 export function translate(language: AppLanguage, key: TranslationKey, variables: Record<string, string | number> = {}) {
-  const template = dictionaries[language][key] || es[key] || key;
+  const localized = dictionaries[language][key];
+  const fallback = es[key];
+  if (!localized && process.env.NODE_ENV !== "production") console.warn(`Missing translation: ${language}.${key}`);
+  const template = localized || fallback || key;
   return Object.entries(variables).reduce((text, [name, value]) => text.replaceAll(`{${name}}`, String(value)), template);
 }
 export function pluralKey(language: AppLanguage, base: string, count: number) {

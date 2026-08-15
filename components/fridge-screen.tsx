@@ -2,6 +2,7 @@
 
 import {
   BookHeart,
+  Check,
   Clipboard,
   FileText,
   Heart,
@@ -15,6 +16,7 @@ import {
   ScanBarcode,
   Share2,
   Sparkles,
+  Tags,
   Trash2,
   X,
 } from "lucide-react";
@@ -22,15 +24,18 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { AppData, ShoppingListItem } from "@/lib/types";
 import { BarcodeScanner } from "./barcode-scanner";
 import { fridgeRepository } from "@/lib/fridge/repository";
-import type { FridgeItem, FridgeItemInput } from "@/lib/fridge/types";
+import type { FridgeItem, FridgeItemInput, LearnedCategoryRule } from "@/lib/fridge/types";
 import { findPossibleDuplicateProduct } from "@/lib/fridge/duplicates";
-import { getFoodFilterCategory, getFoodVisual, type FoodFilterCategory } from "@/lib/fridge/emoji";
+import type { FoodFilterCategory } from "@/lib/fridge/emoji";
+import { normalizeCategoryRuleName, resolveProductCategory, resolveProductVisual } from "@/lib/fridge/category";
+import { categoryRuleRepository } from "@/lib/fridge/category-repository";
 import { lookupProduct, saveUnknownProduct } from "@/lib/products/service";
 import { RecipeService } from "@/lib/recipes/service";
 import type { RecipeSuggestion } from "@/lib/recipes/types";
 import { savedRecipeRepository } from "@/lib/recipes/saved-repository";
 import { recipeFingerprint, type SavedRecipe } from "@/lib/recipes/saved-types";
 import { recipeAsText, recipePdf } from "@/lib/recipes/share";
+import { ingredientsMatch, splitRecipeIngredients, uniqueIngredients } from "@/lib/recipes/ingredients";
 import { shareOrDownloadPdf } from "@/lib/pdf/share";
 import { useI18n } from "@/lib/i18n";
 
@@ -56,6 +61,7 @@ export function FridgeScreen({
   const [items, setItems] = useState<FridgeItem[]>(() =>
     fridgeRepository.local(userId),
   );
+  const [categoryRules, setCategoryRules] = useState<LearnedCategoryRule[]>(() => categoryRuleRepository.local(userId));
   const [form, setForm] = useState<Partial<FridgeItem> | null>(null);
   const [captureMode, setCaptureMode] = useState<"scanner" | null>(null);
   const [quickName, setQuickName] = useState("");
@@ -95,6 +101,7 @@ export function FridgeScreen({
   const [selectedItem, setSelectedItem] = useState<FridgeItem | null>(null);
   useEffect(() => {
     fridgeRepository.load(userId).then(setItems);
+    categoryRuleRepository.load(userId).then(setCategoryRules);
     savedRecipeRepository.load(userId).then(setSavedRecipes);
   }, [userId]);
   const scanned = useCallback(async (code: string) => {
@@ -197,28 +204,29 @@ export function FridgeScreen({
     setQuickSaving(false);
     requestAnimationFrame(() => quickInput.current?.focus());
   };
-  const addShopping = (name: string) => {
-    const normalized = name.trim().toLocaleLowerCase("es-CL");
-    if (
-      data.shoppingListItems.some(
-        (item) =>
-          !item.completed &&
-          item.name.trim().toLocaleLowerCase("es-CL") === normalized,
-      )
-    )
-      return;
-    const at = new Date().toISOString();
-    const item: ShoppingListItem = {
-      id: uid(),
-      name: name.trim(),
-      completed: false,
-      createdAt: at,
-      updatedAt: at,
-    };
-    update((current) => ({
-      ...current,
-      shoppingListItems: [...current.shoppingListItems, item],
-    }));
+  const addShopping = (names: string[]) => {
+    let added = 0;
+    let existing = 0;
+    update((current) => {
+      const additions: ShoppingListItem[] = [];
+      for (const name of uniqueIngredients(names)) {
+        if ([...current.shoppingListItems, ...additions].some((item) => ingredientsMatch(item.name, name))) {
+          existing += 1;
+          continue;
+        }
+        const at = new Date().toISOString();
+        additions.push({ id: uid(), name: name.trim(), completed: false, createdAt: at, updatedAt: at });
+        added += 1;
+      }
+      return additions.length ? { ...current, shoppingListItems: [...current.shoppingListItems, ...additions] } : current;
+    });
+    const message = added > 0
+      ? `${added} ${added === 1 ? "ingrediente agregado" : "ingredientes agregados"} a tu lista 🛒${existing ? ` · ${existing} ya ${existing === 1 ? "está" : "están"} en tu lista` : ""}`
+      : "Ya está en tu lista";
+    setAddedFeedback(message);
+    if (feedbackTimer.current) window.clearTimeout(feedbackTimer.current);
+    feedbackTimer.current = window.setTimeout(() => setAddedFeedback(""), 2600);
+    return { added, existing };
   };
   const createRecipes = async (options: {
     mealType: "desayuno" | "comida" | "cena";
@@ -254,7 +262,7 @@ export function FridgeScreen({
     }
   };
   const visibleItems = items
-    .filter((item) => inventoryFilter === "all" || getFoodFilterCategory(item.name) === inventoryFilter)
+    .filter((item) => inventoryFilter === "all" || resolveProductCategory(item, categoryRules) === inventoryFilter)
     .filter((item) => item.name.toLocaleLowerCase("es-CL").includes(inventorySearch.trim().toLocaleLowerCase("es-CL")));
   const pendingShoppingItems = data.shoppingListItems.filter((item) => !item.completed).length;
   return (
@@ -287,7 +295,7 @@ export function FridgeScreen({
           <button
             disabled={quickSaving}
             type="submit"
-            aria-label="Agregar producto"
+            aria-label={t("fridge.addProduct")}
             className="tap grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-[#176b46] text-white disabled:opacity-60"
           >
             {quickSaving ? (
@@ -379,7 +387,7 @@ export function FridgeScreen({
                 <Search className="shrink-0 text-[#718078]" size={18} />
                 <input type="search" value={inventorySearch} onFocus={() => { setInventorySearchFocused(true); window.setTimeout(() => window.scrollTo({ top: 0, behavior: "smooth" }), 80); }} onBlur={() => window.setTimeout(() => setInventorySearchFocused(false), 120)} onChange={(event) => setInventorySearch(event.target.value)} placeholder={t("fridge.search")} aria-label={t("fridge.search")} className="min-h-11 min-w-0 flex-1 bg-transparent text-[16px] outline-none" />
               </label>
-              <button type="button" onClick={() => setFilterOpen(true)} aria-label="Filtrar alimentos" className={`relative grid h-11 w-11 shrink-0 place-items-center rounded-2xl border text-xl font-bold leading-none ${inventoryFilter === "all" ? "theme-card border-black/[.06] bg-white" : "border-[#4fc187] bg-[#173c2b] text-[#62d196]"}`}>
+              <button type="button" onClick={() => setFilterOpen(true)} aria-label={t("fridge.filter")} className={`relative grid h-11 w-11 shrink-0 place-items-center rounded-2xl border text-xl font-bold leading-none ${inventoryFilter === "all" ? "theme-card border-black/[.06] bg-white" : "border-[#4fc187] bg-[#173c2b] text-[#62d196]"}`}>
                 ⋯
                 {inventoryFilter !== "all" && <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-[#62d196]" />}
               </button>
@@ -392,7 +400,7 @@ export function FridgeScreen({
                 onClick={() => setSelectedItem(item)}
                 className="tap flex min-h-[82px] min-w-0 flex-col items-center justify-center overflow-hidden rounded-2xl border border-white/10 bg-[#10291f] px-2 py-3 text-center text-white shadow-sm transition-transform active:scale-[.97]"
               >
-                <span aria-hidden="true" className="mb-1 text-[25px] leading-none">{getFoodVisual(item.name).emoji}</span>
+                <span aria-hidden="true" className="mb-1 text-[25px] leading-none">{resolveProductVisual(item, categoryRules).emoji}</span>
                 <span className="line-clamp-2 min-w-0 break-words text-sm font-semibold leading-snug">
                   {item.name}
                 </span>
@@ -454,6 +462,32 @@ export function FridgeScreen({
             setItems(await fridgeRepository.remove(userId, selectedItem.id, items));
             setSelectedItem(null);
           }}
+          category={resolveProductCategory(selectedItem, categoryRules)}
+          saveCategory={async (category, remember) => {
+            const previousItems = items;
+            const optimistic = items.map((item) => item.id === selectedItem.id ? { ...item, customCategory: category } : item);
+            setItems(optimistic);
+            setError("");
+            try {
+              const next = await fridgeRepository.setCustomCategory(userId, selectedItem.id, category, previousItems);
+              setItems(next);
+              if (category && remember) {
+                const rule = { normalizedName: normalizeCategoryRuleName(selectedItem.name), category };
+                try {
+                  setCategoryRules(await categoryRuleRepository.save(userId, rule, categoryRules));
+                } catch {
+                  setAddedFeedback(t("fridge.categoryRuleSaveError"));
+                  if (feedbackTimer.current) window.clearTimeout(feedbackTimer.current);
+                  feedbackTimer.current = window.setTimeout(() => setAddedFeedback(""), 3000);
+                }
+              }
+              setSelectedItem(null);
+            } catch (cause) {
+              setItems(previousItems);
+              setError(cause instanceof Error ? cause.message : t("fridge.categorySaveError"));
+              throw cause;
+            }
+          }}
         />
       )}
       {filterOpen && (
@@ -491,6 +525,7 @@ export function FridgeScreen({
           insufficient={recipeInsufficient}
           clearInsufficient={() => setRecipeInsufficient(false)}
           addShopping={addShopping}
+          inventory={items}
           savedRecipes={savedRecipes}
           openSaved={() => setSavedRecipesOpen(true)}
           saveRecipe={async (recipe) => {
@@ -553,17 +588,18 @@ function DuplicateProductSheet({
   cancel: () => void;
   confirm: () => Promise<void>;
 }) {
+  const { t } = useI18n();
   return (
     <div className="fixed inset-0 z-[95] flex items-end justify-center bg-black/50 sm:items-center">
       <section className="theme-card w-full max-w-lg rounded-t-[30px] bg-white p-5 safe-bottom sm:rounded-[30px]">
-        <h2 className="text-xl font-bold">Producto posiblemente duplicado</h2>
-        <p className="mt-2 text-sm text-[#718078]"><b>{productName}</b> ya está en tu refrigerador.</p>
-        <p className="mt-4 font-semibold">¿Qué quieres hacer?</p>
+        <h2 className="text-xl font-bold">{t("fridge.duplicateTitle")}</h2>
+        <p className="mt-2 text-sm text-[#718078]">{t("fridge.alreadyInFridge", { product: productName })}</p>
+        <p className="mt-4 font-semibold">{t("fridge.duplicateQuestion")}</p>
         <button disabled={saving} onClick={confirm} className="mt-3 flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl border border-black/10 font-semibold disabled:opacity-50">
           {saving && <LoaderCircle className="animate-spin" size={18} />}
-          Agregar de todas formas
+          {t("fridge.addAnyway")}
         </button>
-        <button disabled={saving} onClick={cancel} className="mt-2 min-h-12 w-full rounded-2xl bg-[#176b46] font-semibold text-white disabled:opacity-50">No agregar</button>
+        <button disabled={saving} onClick={cancel} className="mt-2 min-h-12 w-full rounded-2xl bg-[#176b46] font-semibold text-white disabled:opacity-50">{t("fridge.doNotAdd")}</button>
       </section>
     </div>
   );
@@ -594,7 +630,7 @@ function InventoryFilterSheet({
       <section className="theme-card w-full max-w-lg rounded-t-[30px] bg-white p-5 safe-bottom sm:rounded-[30px]">
         <div className="flex items-center gap-3">
           <h2 className="flex-1 text-xl font-bold">{t("fridge.filter")}</h2>
-          <button onClick={close} aria-label="Cerrar filtros" className="grid h-11 w-11 place-items-center rounded-full bg-[#edf2ee]"><X /></button>
+          <button onClick={close} aria-label={t("common.close")} className="grid h-11 w-11 place-items-center rounded-full bg-[#edf2ee]"><X /></button>
         </div>
         <div className="mt-4 grid grid-cols-1 gap-1">
           {options.map((option) => (
@@ -614,15 +650,48 @@ function InventoryItemSheet({
   close,
   rename,
   remove,
+  category,
+  saveCategory,
 }: {
   item: FridgeItem;
   close: () => void;
   rename: (name: string) => Promise<void>;
   remove: () => Promise<void>;
+  category: FoodFilterCategory;
+  saveCategory: (category: FoodFilterCategory | undefined, remember: boolean) => Promise<void>;
 }) {
+  const { t } = useI18n();
   const [editing, setEditing] = useState(false);
+  const [changingCategory, setChangingCategory] = useState(false);
   const [name, setName] = useState(item.name);
   const [saving, setSaving] = useState(false);
+  const [categoryError, setCategoryError] = useState("");
+  const [chosenCategory, setChosenCategory] = useState<FoodFilterCategory | undefined>(item.customCategory ?? category);
+  const [rememberCategory, setRememberCategory] = useState(false);
+  const categoryOptions: Array<{ value: FoodFilterCategory; label: string }> = [
+    { value: "produce", label: `🥬 ${t("fridge.filterProduce")}` },
+    { value: "meat", label: `🥩 ${t("fridge.filterMeat")}` },
+    { value: "dairy", label: `🧀 ${t("fridge.filterDairy")}` },
+    { value: "bakery", label: `🍞 ${t("fridge.filterBakery")}` },
+    { value: "seasoning", label: `🧂 ${t("fridge.filterSeasoning")}` },
+    { value: "drink", label: `🥤 ${t("fridge.filterDrink")}` },
+    { value: "other", label: `🍴 ${t("fridge.filterOther")}` },
+  ];
+  if (changingCategory) return (
+    <div className="fixed inset-0 z-[85] flex items-end justify-center bg-black/50 sm:items-center">
+      <section className="theme-card max-h-[calc(100dvh-env(safe-area-inset-top))] w-full max-w-lg overflow-y-auto rounded-t-[30px] bg-white p-5 safe-bottom sm:rounded-[30px]">
+        <div className="flex items-center gap-3"><h2 className="flex-1 text-xl font-bold">{t("fridge.changeCategory")}</h2><button onClick={() => setChangingCategory(false)} aria-label={t("common.close")} className="grid h-11 w-11 place-items-center rounded-full bg-[#edf2ee]"><X /></button></div>
+        <p className="mt-1 text-sm text-[#718078]">{item.name}</p>
+        <div className="mt-4 space-y-1">
+          {categoryOptions.map((option) => <button key={option.value} type="button" onClick={() => setChosenCategory(option.value)} className={`flex min-h-12 w-full items-center rounded-xl px-3 text-left font-semibold ${chosenCategory === option.value ? "bg-[#e6f3ec] text-[#176b46]" : "hover:bg-black/[.04]"}`}><span className="w-7">{chosenCategory === option.value ? "✓" : ""}</span>{option.label}</button>)}
+          <button type="button" onClick={() => { setChosenCategory(undefined); setRememberCategory(false); }} className={`flex min-h-12 w-full items-center rounded-xl px-3 text-left font-semibold ${chosenCategory === undefined ? "bg-[#e6f3ec] text-[#176b46]" : "hover:bg-black/[.04]"}`}><span className="w-7">{chosenCategory === undefined ? "✓" : ""}</span>✨ {t("fridge.useAutomaticCategory")}</button>
+        </div>
+        {chosenCategory && <label className="mt-4 flex min-h-12 items-center gap-3 rounded-xl border border-black/[.07] px-3 text-sm font-semibold"><input type="checkbox" checked={rememberCategory} onChange={(event) => setRememberCategory(event.target.checked)} className="h-5 w-5 accent-[#176b46]" />{t("fridge.rememberCategory")}</label>}
+        {categoryError && <p role="alert" className="mt-3 text-sm font-semibold text-red-700">{categoryError}</p>}
+        <div className="mt-5 grid grid-cols-2 gap-3"><button disabled={saving} onClick={() => setChangingCategory(false)} className="min-h-12 rounded-2xl border border-black/10 font-semibold">{t("common.cancel")}</button><button disabled={saving} onClick={async () => { setSaving(true); setCategoryError(""); try { await saveCategory(chosenCategory, rememberCategory); } catch { setCategoryError(t("fridge.categorySaveError")); } finally { setSaving(false); } }} className="flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-[#176b46] font-semibold text-white disabled:opacity-60">{saving && <LoaderCircle className="animate-spin" size={18} />}{t("common.save")}</button></div>
+      </section>
+    </div>
+  );
   if (editing) {
     return (
       <div className="fixed inset-0 z-[80] flex items-end justify-center bg-black/50 sm:items-center">
@@ -635,9 +704,9 @@ function InventoryItemSheet({
           }}
           className="theme-card w-full max-w-lg rounded-t-[30px] bg-white p-5 safe-bottom sm:rounded-[30px]"
         >
-          <h2 className="text-xl font-bold">Editar nombre</h2>
+          <h2 className="text-xl font-bold">{t("fridge.editProductName")}</h2>
           <label className="mt-4 block text-sm font-semibold">
-            Nombre
+            {t("list.name")}
             <input
               autoFocus
               required
@@ -648,11 +717,11 @@ function InventoryItemSheet({
           </label>
           <div className="mt-5 grid grid-cols-2 gap-3">
             <button type="button" onClick={() => setEditing(false)} className="min-h-12 rounded-2xl border border-black/10 font-semibold">
-              Cancelar
+              {t("common.cancel")}
             </button>
             <button disabled={saving} className="flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-[#176b46] font-semibold text-white disabled:opacity-60">
               {saving && <LoaderCircle className="animate-spin" size={18} />}
-              Guardar
+              {t("common.save")}
             </button>
           </div>
         </form>
@@ -664,22 +733,25 @@ function InventoryItemSheet({
       <section className="theme-card w-full max-w-lg rounded-t-[30px] bg-white p-5 safe-bottom sm:rounded-[30px]">
         <div className="flex items-start gap-3">
           <div className="min-w-0 flex-1">
-            <p className="text-xs font-bold uppercase tracking-[.14em] text-[#718078]">Nombre del producto</p>
+            <p className="text-xs font-bold uppercase tracking-[.14em] text-[#718078]">{t("fridge.productName")}</p>
             <h2 className="mt-1 break-words text-xl font-bold">{item.name}</h2>
           </div>
-          <button onClick={close} aria-label="Cerrar" className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-[#edf2ee]">
+          <button onClick={close} aria-label={t("common.close")} className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-[#edf2ee]">
             <X />
           </button>
         </div>
         <div className="mt-5 space-y-2">
           <button onClick={() => setEditing(true)} className="flex min-h-12 w-full items-center gap-3 rounded-2xl bg-[#edf2ee] px-4 font-semibold">
-            <Pencil size={19} /> Editar nombre
+            <Pencil size={19} /> {t("fridge.editProductName")}
+          </button>
+          <button onClick={() => setChangingCategory(true)} className="flex min-h-12 w-full items-center gap-3 rounded-2xl bg-[#edf2ee] px-4 font-semibold">
+            <Tags size={19} /> {t("fridge.changeCategory")}
           </button>
           <button onClick={remove} className="flex min-h-12 w-full items-center gap-3 rounded-2xl bg-red-50 px-4 font-semibold text-red-700">
-            <Trash2 size={19} /> Eliminar producto
+            <Trash2 size={19} /> {t("fridge.deleteProduct")}
           </button>
           <button onClick={close} className="min-h-12 w-full rounded-2xl font-semibold text-[#718078]">
-            Cancelar
+            {t("common.cancel")}
           </button>
         </div>
       </section>
@@ -688,10 +760,11 @@ function InventoryItemSheet({
 }
 
 function RecipeFlowFrame({ close, children }: { close: () => void; children: React.ReactNode }) {
+  const { t } = useI18n();
   return (
     <div className="fixed inset-0 z-[80] flex items-end justify-center overflow-y-auto bg-black/50 sm:items-center">
       <section className="theme-card max-h-[calc(100dvh-env(safe-area-inset-top))] w-full max-w-lg overflow-y-auto rounded-t-[30px] bg-white p-5 safe-bottom sm:rounded-[30px]">
-        <div className="flex justify-end"><button onClick={close} aria-label="Cerrar" className="grid h-11 w-11 place-items-center rounded-full bg-[#edf2ee]"><X /></button></div>
+        <div className="flex justify-end"><button onClick={close} aria-label={t("common.close")} className="grid h-11 w-11 place-items-center rounded-full bg-[#edf2ee]"><X /></button></div>
         {children}
       </section>
     </div>
@@ -711,6 +784,7 @@ function RecipePrompt({
   insufficient,
   clearInsufficient,
   addShopping,
+  inventory,
   savedRecipes,
   openSaved,
   saveRecipe,
@@ -732,7 +806,8 @@ function RecipePrompt({
   error: string;
   insufficient: boolean;
   clearInsufficient: () => void;
-  addShopping: (name: string) => void;
+  addShopping: (names: string[]) => { added: number; existing: number };
+  inventory: FridgeItem[];
   savedRecipes: SavedRecipe[];
   openSaved: () => void;
   saveRecipe: (recipe: RecipeSuggestion) => Promise<void>;
@@ -744,6 +819,21 @@ function RecipePrompt({
   const [craving, setCraving] = useState("");
   const [ingredientMode, setIngredientMode] = useState<"available_only" | "allow_extras">("available_only");
   const [savingRecipe, setSavingRecipe] = useState(false);
+  const [missingSelections, setMissingSelections] = useState<Record<string, string[]>>({});
+  const [optionalSelections, setOptionalSelections] = useState<Record<string, string[]>>({});
+  const requiredIngredients = selectedRecipe ? uniqueIngredients([...selectedRecipe.ingredients, ...selectedRecipe.missingIngredients]) : [];
+  const recipeIngredients = splitRecipeIngredients(requiredIngredients, inventory);
+  const optionalIngredients = selectedRecipe
+    ? uniqueIngredients(selectedRecipe.optionalIngredients ?? []).filter((ingredient) => !requiredIngredients.some((required) => ingredientsMatch(required, ingredient)))
+    : [];
+  const selectionKey = selectedRecipe ? recipeFingerprint(selectedRecipe) : "";
+  const selectedMissing = missingSelections[selectionKey] ?? recipeIngredients.missing;
+  const selectedOptional = optionalSelections[selectionKey] ?? [];
+  const toggleIngredient = (value: string, kind: "missing" | "optional") => {
+    const current = kind === "missing" ? selectedMissing : selectedOptional;
+    const next = current.includes(value) ? current.filter((item) => item !== value) : [...current, value];
+    (kind === "missing" ? setMissingSelections : setOptionalSelections)((selections) => ({ ...selections, [selectionKey]: next }));
+  };
   const options = [
     ["rapido", `⚡ ${t("recipes.fast")}`],
     ["saludable", `🥗 ${t("recipes.healthy")}`],
@@ -771,12 +861,29 @@ function RecipePrompt({
   );
   if (selectedRecipe) return (
     <RecipeFlowFrame close={close}>
-      <button onClick={backFromRecipe} className="mb-4 min-h-11 font-semibold text-[#176b46]">← Volver</button>
+      <button onClick={backFromRecipe} className="mb-4 min-h-11 font-semibold text-[#176b46]">← {t("common.back")}</button>
       <h2 className="text-2xl font-bold">{selectedRecipe.title}</h2>
-      {selectedRecipe.estimatedMinutes && <p className="mt-1 text-sm font-semibold text-[#176b46]">{selectedRecipe.estimatedMinutes} min</p>}
+      {selectedRecipe.estimatedMinutes && <p className="mt-1 text-sm font-semibold text-[#176b46]">{t("recipes.minutes", { count: selectedRecipe.estimatedMinutes })}</p>}
       <h3 className="mt-5 font-bold">{t("recipes.ingredients")}</h3>
-      <ul className="mt-2 space-y-1 text-sm">{selectedRecipe.ingredients.map((ingredient) => <li key={ingredient}>✓ {ingredient}</li>)}</ul>
-      {selectedRecipe.missingIngredients.length > 0 && <><h3 className="mt-5 font-bold">{t("recipes.needBuy")}</h3><div className="mt-2 flex flex-wrap gap-2">{selectedRecipe.missingIngredients.map((ingredient) => <button key={ingredient} onClick={() => addShopping(ingredient)} className="rounded-full border border-[#176b46] px-3 py-1.5 text-sm font-semibold text-[#176b46]">+ {ingredient}</button>)}</div></>}
+      <ul className="mt-2 space-y-1 text-sm">{recipeIngredients.available.map((ingredient) => <li key={ingredient} className="flex items-center gap-2"><Check size={16} className="text-[#176b46]" /> {ingredient}</li>)}</ul>
+      {recipeIngredients.missing.length > 0 && <IngredientChecklist
+        title={t("recipes.missingTitle")}
+        warning={t(recipeIngredients.missing.length === 1 ? "recipes.missingCount.one" : "recipes.missingCount.other", { count: recipeIngredients.missing.length })}
+        ingredients={recipeIngredients.missing}
+        selected={selectedMissing}
+        toggle={(ingredient) => toggleIngredient(ingredient, "missing")}
+        buttonLabel={t("recipes.addMissing")}
+        add={() => addShopping(selectedMissing)}
+      />}
+      {optionalIngredients.length > 0 && <IngredientChecklist
+        title={t("recipes.optionalTitle")}
+        description={t("recipes.optionalHint")}
+        ingredients={optionalIngredients}
+        selected={selectedOptional}
+        toggle={(ingredient) => toggleIngredient(ingredient, "optional")}
+        buttonLabel={t("recipes.addSelected")}
+        add={() => addShopping(selectedOptional)}
+      />}
       <h3 className="mt-5 font-bold">{t("recipes.preparation")}</h3>
       <ol className="mt-2 list-decimal space-y-2 pl-5 text-sm">{selectedRecipe.steps.map((step, index) => <li key={index}>{step}</li>)}</ol>
       <div className="mt-6 grid grid-cols-2 gap-2">
@@ -793,7 +900,7 @@ function RecipePrompt({
           {savedRecipes.some((recipe) => recipe.fingerprint === recipeFingerprint(selectedRecipe)) ? t("recipes.saved") : savingRecipe ? t("common.loading") : t("recipes.save")}
         </button>
         <button onClick={() => shareRecipe(selectedRecipe)} className="flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-[#176b46] px-3 font-semibold text-[#176b46]">
-          <Share2 size={19} /> Compartir
+          <Share2 size={19} /> {t("common.share")}
         </button>
       </div>
       <button onClick={backFromRecipe} className="mt-6 min-h-12 w-full rounded-2xl bg-[#176b46] font-semibold text-white">{t("recipes.backOptions")}</button>
@@ -802,23 +909,23 @@ function RecipePrompt({
   if (recipes?.length) return (
     <RecipeFlowFrame close={close}>
       <div className="flex items-center justify-between gap-3"><p className="text-xs font-bold uppercase tracking-[.16em] text-[#176b46]">{t("recipes.title")}</p><button onClick={openSaved} className="flex min-h-10 items-center gap-2 rounded-full bg-[#e6f3ec] px-3 text-sm font-semibold text-[#176b46]"><BookHeart size={17} /> {t("recipes.saved")}</button></div>
-      <h2 className="mt-1 text-2xl font-bold">{recipes.length} {recipes.length === 1 ? "idea" : "ideas"} para tu {mealType}</h2>
-      <div className="mt-4 space-y-3">{recipes.map((recipe) => <article key={recipe.title} className="rounded-2xl border border-black/10 p-4"><div className="flex items-start gap-3"><div className="min-w-0 flex-1"><h3 className="font-bold">{recipe.title}</h3><p className="mt-1 text-sm text-[#718078]">{recipe.reason || recipe.description}</p></div>{recipe.estimatedMinutes && <span className="shrink-0 text-xs font-semibold text-[#176b46]">{recipe.estimatedMinutes} min</span>}</div><button onClick={() => view(recipe)} className="mt-3 min-h-11 w-full rounded-xl border border-[#176b46] font-semibold text-[#176b46]">Ver receta</button></article>)}</div>
-      <button onClick={changePreferences} className="mt-4 min-h-12 w-full font-semibold text-[#176b46]">← Cambiar preferencias</button>
+      <h2 className="mt-1 text-2xl font-bold">{t(recipes.length === 1 ? "recipes.idea.one" : "recipes.idea.other", { count: recipes.length, meal: mealLabels[mealType!] })}</h2>
+      <div className="mt-4 space-y-3">{recipes.map((recipe) => <article key={recipe.title} className="rounded-2xl border border-black/10 p-4"><div className="flex items-start gap-3"><div className="min-w-0 flex-1"><h3 className="font-bold">{recipe.title}</h3><p className="mt-1 text-sm text-[#718078]">{recipe.reason || recipe.description}</p></div>{recipe.estimatedMinutes && <span className="shrink-0 text-xs font-semibold text-[#176b46]">{t("recipes.minutes", { count: recipe.estimatedMinutes })}</span>}</div><button onClick={() => view(recipe)} className="mt-3 min-h-11 w-full rounded-xl border border-[#176b46] font-semibold text-[#176b46]">{t("recipes.view")}</button></article>)}</div>
+      <button onClick={changePreferences} className="mt-4 min-h-12 w-full font-semibold text-[#176b46]">← {t("recipes.changePreferences")}</button>
     </RecipeFlowFrame>
   );
   if (insufficient) return (
     <RecipeFlowFrame close={close}>
-      <div className="py-8 text-center"><h2 className="text-xl font-bold">Necesitas algunos ingredientes más</h2><p className="mt-2 text-sm text-[#718078]">No encontramos una receta razonable usando únicamente lo que tienes.</p></div>
-      <button onClick={() => { setIngredientMode("allow_extras"); clearInsufficient(); }} className="min-h-12 w-full rounded-2xl bg-[#176b46] font-semibold text-white">Permitir ingredientes extra</button>
-      <button onClick={clearInsufficient} className="mt-2 min-h-12 w-full font-semibold text-[#176b46]">Volver</button>
+      <div className="py-8 text-center"><h2 className="text-xl font-bold">{t("recipes.insufficientTitle")}</h2><p className="mt-2 text-sm text-[#718078]">{t("recipes.insufficientHint")}</p></div>
+      <button onClick={() => { setIngredientMode("allow_extras"); clearInsufficient(); }} className="min-h-12 w-full rounded-2xl bg-[#176b46] font-semibold text-white">{t("recipes.allowExtraIngredients")}</button>
+      <button onClick={clearInsufficient} className="mt-2 min-h-12 w-full font-semibold text-[#176b46]">{t("common.back")}</button>
     </RecipeFlowFrame>
   );
   if (error) return (
     <RecipeFlowFrame close={close}>
-      <div className="py-8 text-center"><h2 className="text-xl font-bold">No pudimos generar las recetas</h2><p className="mt-2 text-sm text-[#718078]">{error || "Intenta nuevamente."}</p></div>
-      <button onClick={request} className="min-h-12 w-full rounded-2xl bg-[#176b46] font-semibold text-white">Intentar nuevamente</button>
-      <button onClick={changePreferences} className="mt-2 min-h-12 w-full font-semibold text-[#176b46]">Cambiar preferencias</button>
+      <div className="py-8 text-center"><h2 className="text-xl font-bold">{t("recipes.generateError")}</h2><p className="mt-2 text-sm text-[#718078]">{error || t("common.tryAgain")}</p></div>
+      <button onClick={request} className="min-h-12 w-full rounded-2xl bg-[#176b46] font-semibold text-white">{t("common.tryAgain")}</button>
+      <button onClick={changePreferences} className="mt-2 min-h-12 w-full font-semibold text-[#176b46]">{t("recipes.changePreferences")}</button>
     </RecipeFlowFrame>
   );
   return (
@@ -877,6 +984,33 @@ function RecipePrompt({
       </section>
     </div>
   );
+}
+
+function IngredientChecklist({ title, warning, description, ingredients, selected, toggle, buttonLabel, add }: {
+  title: string;
+  warning?: string;
+  description?: string;
+  ingredients: string[];
+  selected: string[];
+  toggle: (ingredient: string) => void;
+  buttonLabel: string;
+  add: () => unknown;
+}) {
+  return <section className="mt-5 rounded-2xl border border-black/[.07] bg-[#f7faf8] p-4">
+    <h3 className="font-bold">{title}</h3>
+    {warning && <p className="mt-1 text-sm font-semibold text-[#8a5a16]">{warning}</p>}
+    {description && <p className="mt-1 text-sm text-[#718078]">{description}</p>}
+    <div className="mt-3 space-y-2">
+      {ingredients.map((ingredient) => {
+        const checked = selected.includes(ingredient);
+        return <button key={ingredient} type="button" onClick={() => toggle(ingredient)} aria-pressed={checked} className="flex min-h-12 w-full items-center gap-3 rounded-xl border border-black/[.07] bg-white px-3 text-left font-semibold">
+          <span className={`grid h-6 w-6 shrink-0 place-items-center rounded-md border ${checked ? "border-[#176b46] bg-[#176b46] text-white" : "border-[#9aa8a0]"}`}>{checked && <Check size={16} />}</span>
+          <span>{ingredient}</span>
+        </button>;
+      })}
+    </div>
+    <button type="button" disabled={!selected.length} onClick={add} className="mt-4 min-h-12 w-full rounded-2xl bg-[#176b46] px-3 font-semibold text-white disabled:opacity-45">{buttonLabel}</button>
+  </section>;
 }
 
 function SavedRecipesSheet({

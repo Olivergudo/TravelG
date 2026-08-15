@@ -79,4 +79,13 @@ export function getFoodFilterCategory(name: string): FoodFilterCategory {
   return "other";
 }
 
+const filterCategoryEmoji: Record<FoodFilterCategory, string> = {
+  produce: "🥬", meat: "🥩", dairy: "🧀", bakery: "🍞",
+  seasoning: "🧂", drink: "🥤", other: "🍴",
+};
+
+export function getFilterCategoryEmoji(category: FoodFilterCategory) {
+  return filterCategoryEmoji[category];
+}
+
 export const foodEmoji = (name: string) => getFoodVisual(name).emoji;

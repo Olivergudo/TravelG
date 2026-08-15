@@ -51,6 +51,7 @@ const schema = {
           "estimatedMinutes",
           "ingredients",
           "missingIngredients",
+          "optionalIngredients",
           "steps",
         ],
         properties: {
@@ -62,6 +63,11 @@ const schema = {
           missingIngredients: {
             type: "array",
             maxItems: 3,
+            items: { type: "string" },
+          },
+          optionalIngredients: {
+            type: "array",
+            maxItems: 6,
             items: { type: "string" },
           },
           steps: { type: "array", items: { type: "string" } },
@@ -115,7 +121,7 @@ export async function POST(request: Request) {
       messages: [
         {
           role: "system",
-          content: `Eres un asistente de cocina práctico basado en el inventario real del usuario. Responde en ${responseLanguages[parsed.data.language]} y exclusivamente como JSON válido. Conserva sin traducir los nombres de productos proporcionados en availableIngredients. Genera entre 1 y 3 recetas diferentes, realistas y fáciles, adecuadas al tipo de comida y preferencias solicitadas. Prioriza los ingredientes disponibles para reducir desperdicio y no afirmes que el usuario tiene algo que no aparece en availableIngredients. Si ingredientMode es available_only, usa estrictamente el inventario y solo puedes asumir agua, sal y aceite; missingIngredients debe estar vacío. Si no existe ninguna receta razonable, responde status="insufficient_ingredients" y suggestions=[]. En cualquier otro caso responde status="ok". Si ingredientMode es allow_extras, permite entre 1 y 3 ingredientes adicionales como máximo e identifícalos en missingIngredients. Si la preferencia es rapido, evita preparaciones complejas. Considera craving solo cuando esté presente. ingredients debe listar los ingredientes disponibles utilizados; reason debe explicar brevemente por qué recomiendas la receta. Usa exactamente esta estructura: ${JSON.stringify(schema)}`,
+          content: `Eres un asistente de cocina práctico basado en el inventario real del usuario. Responde en ${responseLanguages[parsed.data.language]} y exclusivamente como JSON válido. Conserva sin traducir los nombres de productos proporcionados en availableIngredients. Genera entre 1 y 3 recetas diferentes, realistas y fáciles, adecuadas al tipo de comida y preferencias solicitadas. Prioriza el inventario para reducir desperdicio. ingredients debe contener TODOS los ingredientes indispensables de la receta, tanto disponibles como faltantes. missingIngredients se conserva por compatibilidad, pero debe ser una lista vacía: la app calcula los faltantes localmente comparando ingredients con el refrigerador. Si ingredientMode es available_only, usa estrictamente el inventario y solo puedes asumir agua, sal y aceite; optionalIngredients debe estar vacío. Si no existe ninguna receta razonable, responde status="insufficient_ingredients" y suggestions=[]. En cualquier otro caso responde status="ok". Si ingredientMode es allow_extras, puedes incluir ingredientes indispensables que el usuario deba comprar y además sugerir entre 1 y 6 ingredientes NO indispensables en optionalIngredients para mejorar sabor, textura o presentación. Nunca repitas en optionalIngredients un ingrediente indispensable. Si la preferencia es rapido, evita preparaciones complejas. Considera craving solo cuando esté presente. reason debe explicar brevemente por qué recomiendas la receta. Usa exactamente esta estructura: ${JSON.stringify(schema)}`,
         },
         { role: "user", content: JSON.stringify(parsed.data) },
       ],

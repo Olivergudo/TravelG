@@ -4,11 +4,13 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "npm run i18n:check && next build",
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test lib/food-classifier/__tests__/*.test.ts lib/i18n/__tests__/*.test.ts"
+    "test": "tsx --test lib/food-classifier/__tests__/*.test.ts lib/i18n/__tests__/*.test.ts lib/roomies/__tests__/*.test.ts",
+    "i18n:check": "tsx scripts/i18n-check.ts",
+    "check": "npm run typecheck && npm run lint && npm run i18n:check && npm test"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.3",

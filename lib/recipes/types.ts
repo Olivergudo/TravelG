@@ -7,13 +7,18 @@ export const recipeSuggestionSchema = z.object({
   estimatedMinutes: z.number().int().positive().max(360).nullable(),
   ingredients: z.array(z.string().min(1).max(100)).max(20),
   missingIngredients: z.array(z.string().min(1).max(100)).max(3),
+  optionalIngredients: z.array(z.string().min(1).max(100)).max(6).default([]),
   steps: z.array(z.string().min(1).max(300)).min(1).max(10),
 });
 
 export const recipeResponseSchema = z.object({
   suggestions: z.array(recipeSuggestionSchema).min(1).max(3),
 });
-export type RecipeSuggestion = z.infer<typeof recipeSuggestionSchema>;
+type ParsedRecipeSuggestion = z.infer<typeof recipeSuggestionSchema>;
+export type RecipeSuggestion = Omit<ParsedRecipeSuggestion, "optionalIngredients"> & {
+  /** Ausente en recetas guardadas antes de incorporar sugerencias opcionales. */
+  optionalIngredients?: string[];
+};
 export type RecipeGenerationResult =
   | { status: "ok"; suggestions: RecipeSuggestion[] }
   | { status: "insufficient_ingredients"; suggestions: [] };
@@ -33,6 +38,7 @@ export function parseRecipeResponse(payload: unknown): { suggestions: RecipeSugg
       estimatedMinutes: Number.isFinite(parsedTime) ? parsedTime : null,
       ingredients: value.ingredients ?? value.ingredientsUsed ?? [],
       missingIngredients: value.missingIngredients ?? value.extraIngredients ?? [],
+      optionalIngredients: value.optionalIngredients ?? [],
       steps: value.steps,
     };
     const parsed = recipeSuggestionSchema.safeParse(normalized);

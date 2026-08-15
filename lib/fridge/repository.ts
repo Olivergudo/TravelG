@@ -12,12 +12,19 @@ function writeLocal(userId: string, items: FridgeItem[]) {
   localStorage.setItem(cacheKey(userId), JSON.stringify(items));
 }
 
+function categorySchemaIsMissing(error: { code?: string; message?: string; details?: string }) {
+  const text = `${error.message || ""} ${error.details || ""}`.toLowerCase();
+  return error.code === "42703" || error.code === "PGRST204" ||
+    (text.includes("custom_category") && (text.includes("column") || text.includes("schema cache")));
+}
+
 function fromRow(row: Record<string, unknown>): FridgeItem {
   return {
     id: String(row.id), userId: String(row.user_id),
     barcode: row.barcode ? String(row.barcode) : undefined,
     name: String(row.name), quantity: row.quantity == null ? undefined : Number(row.quantity),
     unit: row.unit ? String(row.unit) : undefined,
+    customCategory: row.custom_category ? row.custom_category as FridgeItem["customCategory"] : undefined,
     createdAt: String(row.created_at), updatedAt: String(row.updated_at),
   };
 }
@@ -27,7 +34,7 @@ export const fridgeRepository = {
   async load(userId: string) {
     if (!supabase) return readLocal(userId);
     const { data, error } = await supabase.from("fridge_items")
-      .select("id,user_id,barcode,name,quantity,unit,created_at,updated_at")
+      .select("id,user_id,barcode,name,quantity,unit,custom_category,created_at,updated_at")
       .eq("user_id", userId).order("created_at");
     if (error) return readLocal(userId);
     const items = (data || []).map((row) => fromRow(row));
@@ -58,6 +65,18 @@ export const fridgeRepository = {
     const next = current.filter((item) => item.id !== id);
     writeLocal(userId, next);
     if (supabase) await supabase.from("fridge_items").delete().eq("user_id", userId).eq("id", id);
+    return next;
+  },
+  async setCustomCategory(userId: string, id: string, category: FridgeItem["customCategory"], current: FridgeItem[]) {
+    const updatedAt = new Date().toISOString();
+    const next = current.map((item) => item.id === id ? { ...item, customCategory: category, updatedAt } : item);
+    writeLocal(userId, next);
+    if (supabase) {
+      const { error } = await supabase.from("fridge_items").update({ custom_category: category ?? null, updated_at: updatedAt }).eq("user_id", userId).eq("id", id);
+      // Permite usar la corrección en este dispositivo mientras se aplica la
+      // migración. Errores reales de permisos/red se revierten y se muestran.
+      if (error && !categorySchemaIsMissing(error)) { writeLocal(userId, current); throw error; }
+    }
     return next;
   },
 };

@@ -5,8 +5,14 @@ export type FridgeItem = {
   name: string;
   quantity?: number;
   unit?: string;
+  customCategory?: import("./emoji").FoodFilterCategory;
   createdAt: string;
   updatedAt: string;
 };
 
 export type FridgeItemInput = Pick<FridgeItem, "name"> & Partial<Pick<FridgeItem, "barcode" | "quantity" | "unit">>;
+
+export type LearnedCategoryRule = {
+  normalizedName: string;
+  category: import("./emoji").FoodFilterCategory;
+};
