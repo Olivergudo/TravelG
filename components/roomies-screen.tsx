@@ -366,7 +366,7 @@ function GroupExpenseCard({ expense, item, names, actor, userId, reload }: { exp
   const payer = names.get(expense.payer_id) || t("roomies.member");
   const myShare = expense.group_expense_shares.find((share) => share.user_id === userId);
   const singleShare = expense.group_expense_shares.length === 1 ? expense.group_expense_shares[0] : undefined;
-  const personalLabel = singleShare
+  const personalLabel = expense.scope === "personal" && singleShare
     ? expense.payer_id === userId
       ? t("roomies.groupExpense.owesMe", { participant: names.get(singleShare.user_id) || t("roomies.member") })
       : singleShare.user_id === userId
@@ -391,9 +391,9 @@ function GroupExpenseCard({ expense, item, names, actor, userId, reload }: { exp
   return <details className="theme-card group w-full max-w-[94%] overflow-hidden rounded-[24px] border border-[#A1DBEE]/30 bg-white shadow-sm md:max-w-[78%]">
     <summary className="cursor-pointer list-none p-4 [&::-webkit-details-marker]:hidden">
       <div className="flex items-center justify-between gap-3"><span className="rounded-full bg-[#A1DBEE]/15 px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wide text-[#5aa8c4]">{personalLabel}</span><span className="text-[11px] text-[#839087]">{time}</span></div>
-      <strong className="mt-3 block text-3xl tracking-[-.04em]">{formatGroupAmount(Number(singleShare?.amount ?? expense.total_amount), expense.currency)}</strong>
+      <strong className="mt-3 block text-3xl tracking-[-.04em]">{formatGroupAmount(Number(expense.scope === "personal" ? singleShare?.amount ?? expense.total_amount : expense.total_amount), expense.currency)}</strong>
       <h3 className="mt-1 text-base font-bold">{expense.concept}</h3>
-      <p className="mt-1 text-sm text-[#718078]">{singleShare ? t("roomies.groupExpense.totalPaidBy", { payer, total: formatGroupAmount(Number(expense.total_amount), expense.currency) }) : `${t("roomies.groupExpense.paidBy", { payer })} · ${count("roomies.groupExpense.roomies", expense.group_expense_shares.length)}`}</p>
+      <p className="mt-1 text-sm text-[#718078]">{expense.scope === "personal" && singleShare ? t("roomies.groupExpense.totalPaidBy", { payer, total: formatGroupAmount(Number(expense.total_amount), expense.currency) }) : `${t("roomies.groupExpense.paidBy", { payer })} · ${count("roomies.groupExpense.roomies", expense.group_expense_shares.length)}`}</p>
       <span className="mt-3 inline-flex rounded-full bg-amber-400/15 px-2.5 py-1 text-[10px] font-extrabold uppercase text-amber-600">{t(`roomies.groupExpense.${statusKey}`)}</span>
     </summary>
     <div className="border-t border-black/[.06] px-4 pb-4 pt-3">
@@ -464,6 +464,7 @@ function GroupExpenseForm({ close, household, members, userId, currency, complet
   const [amount, setAmount] = useState("");
   const [concept, setConcept] = useState("");
   const [selected, setSelected] = useState<string[]>(others.map((member) => member.user_id));
+  const [scope, setScope] = useState<"group" | "personal">("group");
   const [mode, setMode] = useState<"equal" | "custom">("equal");
   const [custom, setCustom] = useState<Record<string, string>>({});
   const [category, setCategory] = useState("");
@@ -471,7 +472,7 @@ function GroupExpenseForm({ close, household, members, userId, currency, complet
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const total = Number(amount);
-  const toggle = (id: string) => setSelected((current) => current.includes(id) ? current.filter((value) => value !== id) : [...current, id]);
+  const toggle = (id: string) => setSelected((current) => scope === "personal" ? [id] : current.includes(id) ? current.filter((value) => value !== id) : [...current, id]);
   const submit = async () => {
     if (!concept.trim() || !Number.isFinite(total) || total <= 0 || selected.length === 0 || saving) return;
     let shares: Array<{ userId: string; amount: number }>;
@@ -479,7 +480,7 @@ function GroupExpenseForm({ close, household, members, userId, currency, complet
     catch { setError(t("roomies.groupExpense.splitError")); return; }
     setSaving(true); setError("");
     try {
-      const messageId = await createGroupExpense({ householdId: household.id, concept, totalAmount: total, currency, category, notes, shares });
+      const messageId = await createGroupExpense({ householdId: household.id, concept, totalAmount: total, currency, scope, category, notes, shares });
       await notifyRoomieEvent(messageId);
       await completed();
     } catch { setError(t("roomies.groupExpense.createError")); setSaving(false); }
@@ -487,6 +488,7 @@ function GroupExpenseForm({ close, household, members, userId, currency, complet
   return <SheetFrame close={close} title={t("roomies.groupExpense.title")}>
     <label className="block text-sm font-bold">{t("roomies.groupExpense.amount")}</label><input autoFocus inputMode="decimal" value={amount} onChange={(event) => setAmount(event.target.value)} placeholder="$0" className="theme-card mt-2 min-h-14 w-full rounded-2xl border border-black/10 bg-white px-4 text-xl font-bold outline-none focus:border-[#176b46]"/>
     <label className="mt-4 block text-sm font-bold">{t("roomies.groupExpense.concept")}</label><input value={concept} onChange={(event) => setConcept(event.target.value)} maxLength={100} className="theme-card mt-2 min-h-14 w-full rounded-2xl border border-black/10 bg-white px-4 outline-none focus:border-[#176b46]"/>
+    <p className="mt-4 text-sm font-bold">{t("roomies.groupExpense.kind")}</p><div className="mt-2 grid grid-cols-2 gap-2"><Choice selected={scope === "group"} label={t("roomies.groupExpense.groupKind")} click={() => { setScope("group"); setSelected(others.map((member) => member.user_id)); }}/><Choice selected={scope === "personal"} label={t("roomies.groupExpense.personalKind")} click={() => { setScope("personal"); setSelected(others[0] ? [others[0].user_id] : []); }}/></div>
     <p className="mt-4 text-sm font-bold">{t("roomies.groupExpense.chargeTo")}</p><div className="mt-2 flex flex-wrap gap-2">{others.map((member) => <button key={member.user_id} type="button" onClick={() => toggle(member.user_id)} className={`min-h-10 rounded-full border px-3 text-sm font-bold ${selected.includes(member.user_id) ? "border-[#176b46] bg-[#e3f2e9] text-[#176b46]" : "theme-card border-black/10 bg-white"}`}>{selected.includes(member.user_id) && <Check className="mr-1 inline" size={14}/>} {member.display_name}</button>)}</div>
     <p className="mt-4 text-sm font-bold">{t("roomies.groupExpense.split")}</p><div className="mt-2 grid grid-cols-2 gap-2"><Choice selected={mode === "equal"} label={t("roomies.groupExpense.equal")} click={() => setMode("equal")}/><Choice selected={mode === "custom"} label={t("roomies.groupExpense.custom")} click={() => setMode("custom")}/></div>
     {mode === "custom" && <div className="mt-3 space-y-2">{selected.map((id) => <label key={id} className="flex items-center gap-3 text-sm"><span className="min-w-0 flex-1 truncate">{members.find((member) => member.user_id === id)?.display_name}</span><input inputMode="decimal" value={custom[id] || ""} onChange={(event) => setCustom((current) => ({ ...current, [id]: event.target.value }))} placeholder="$0" className="theme-card h-11 w-28 rounded-xl border border-black/10 bg-white px-3 text-right outline-none"/></label>)}</div>}

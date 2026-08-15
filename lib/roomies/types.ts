@@ -77,6 +77,7 @@ export type GroupExpense = {
   concept: string;
   total_amount: number;
   currency: "CLP" | "MXN" | "USD" | "EUR";
+  scope: "group" | "personal";
   category: string | null;
   notes: string | null;
   status: "pending" | "partially_paid" | "paid" | "cancelled";

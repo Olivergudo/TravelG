@@ -69,6 +69,7 @@ create table if not exists public.group_expenses (
   concept text not null check (char_length(trim(concept)) between 1 and 100),
   total_amount numeric(14,2) not null check (total_amount > 0),
   currency text not null default 'CLP' check (currency in ('CLP', 'MXN', 'USD', 'EUR')),
+  scope text not null default 'group' check (scope in ('group', 'personal')),
   category text,
   notes text check (notes is null or char_length(notes) <= 500),
   status text not null default 'pending' check (status in ('pending', 'partially_paid', 'paid', 'cancelled')),
@@ -76,6 +77,7 @@ create table if not exists public.group_expenses (
   resolved_at timestamptz
 );
 alter table public.group_expenses add column if not exists currency text not null default 'CLP' check (currency in ('CLP', 'MXN', 'USD', 'EUR'));
+alter table public.group_expenses add column if not exists scope text not null default 'group' check (scope in ('group', 'personal'));
 
 create table if not exists public.group_expense_shares (
   id uuid primary key default gen_random_uuid(),
@@ -115,6 +117,11 @@ where share.expense_id = expense.id
   and share.amount = expense.total_amount
   and (select count(*) from public.group_expense_shares sibling where sibling.expense_id = expense.id) = 1;
 
+update public.group_expenses expense
+set scope = 'personal'
+where expense.scope = 'group'
+  and (select count(*) from public.group_expense_shares share where share.expense_id = expense.id) = 1;
+
 create or replace function public.is_household_member(target_household uuid)
 returns boolean language sql stable security definer set search_path = public as $$
   select exists (
@@ -125,6 +132,22 @@ $$;
 
 revoke all on function public.is_household_member(uuid) from public;
 grant execute on function public.is_household_member(uuid) to authenticated;
+
+create or replace function public.can_view_group_expense(target_expense uuid)
+returns boolean language sql stable security definer set search_path = public as $$
+  select exists (
+    select 1 from public.group_expenses expense
+    where expense.id = target_expense
+      and public.is_household_member(expense.household_id)
+      and (
+        expense.scope = 'group'
+        or expense.payer_id = auth.uid()
+        or exists (select 1 from public.group_expense_shares share where share.expense_id = expense.id and share.user_id = auth.uid())
+      )
+  );
+$$;
+revoke all on function public.can_view_group_expense(uuid) from public;
+grant execute on function public.can_view_group_expense(uuid) to authenticated;
 
 alter table public.households enable row level security;
 alter table public.household_members enable row level security;
@@ -144,7 +167,14 @@ using (public.is_household_member(household_id));
 
 drop policy if exists "members_read_messages" on public.household_messages;
 create policy "members_read_messages" on public.household_messages for select to authenticated
-using (public.is_household_member(household_id));
+using (
+  public.is_household_member(household_id)
+  and case
+    when type in ('group_expense_created', 'group_expense_payment_reported', 'group_expense_payment_confirmed')
+      then public.can_view_group_expense((metadata->>'expenseId')::uuid)
+    else true
+  end
+);
 
 drop policy if exists "members_send_messages" on public.household_messages;
 create policy "members_send_messages" on public.household_messages for insert to authenticated
@@ -158,11 +188,11 @@ using (public.is_household_member(household_id));
 
 drop policy if exists "members_read_group_expenses" on public.group_expenses;
 create policy "members_read_group_expenses" on public.group_expenses for select to authenticated
-using (public.is_household_member(household_id));
+using (public.can_view_group_expense(id));
 
 drop policy if exists "members_read_group_expense_shares" on public.group_expense_shares;
 create policy "members_read_group_expense_shares" on public.group_expense_shares for select to authenticated
-using (exists (select 1 from public.group_expenses expense where expense.id = expense_id and public.is_household_member(expense.household_id)));
+using (public.can_view_group_expense(expense_id));
 
 drop policy if exists "own_push_subscriptions" on public.push_subscriptions;
 create policy "own_push_subscriptions" on public.push_subscriptions for all to authenticated
@@ -309,12 +339,13 @@ begin
 end;
 $$;
 
-drop function if exists public.create_group_expense(uuid, text, numeric, text, text, jsonb);
+drop function if exists public.create_group_expense(uuid, text, numeric, text, text, text, jsonb);
 create or replace function public.create_group_expense(
   target_household uuid,
   expense_concept text,
   expense_total numeric,
   expense_currency text,
+  expense_scope text,
   expense_category text,
   expense_notes text,
   participant_shares jsonb
@@ -334,8 +365,9 @@ begin
   if shares_total <= 0 or shares_total - expense_total > 0.01 then raise exception 'Shares cannot exceed total'; end if;
 
   if expense_currency not in ('CLP', 'MXN', 'USD', 'EUR') then raise exception 'Invalid currency'; end if;
-  insert into public.group_expenses (household_id, creator_id, payer_id, concept, total_amount, currency, category, notes)
-  values (target_household, uid, uid, trim(expense_concept), expense_total, expense_currency, nullif(trim(expense_category), ''), nullif(trim(expense_notes), ''))
+  if expense_scope not in ('group', 'personal') or (expense_scope = 'personal' and jsonb_array_length(participant_shares) <> 1) then raise exception 'Invalid expense scope'; end if;
+  insert into public.group_expenses (household_id, creator_id, payer_id, concept, total_amount, currency, scope, category, notes)
+  values (target_household, uid, uid, trim(expense_concept), expense_total, expense_currency, expense_scope, nullif(trim(expense_category), ''), nullif(trim(expense_notes), ''))
   returning id into expense_id;
 
   for share_data in select * from jsonb_to_recordset(participant_shares) as share_row("userId" uuid, amount numeric)
@@ -348,7 +380,7 @@ begin
   end loop;
 
   insert into public.household_messages (household_id, user_id, type, metadata)
-  values (target_household, uid, 'group_expense_created', jsonb_build_object('expenseId', expense_id, 'concept', trim(expense_concept), 'totalAmount', expense_total))
+  values (target_household, uid, 'group_expense_created', jsonb_build_object('expenseId', expense_id, 'concept', trim(expense_concept), 'totalAmount', expense_total, 'scope', expense_scope))
   returning id into event_id;
   return event_id;
 end;
@@ -429,7 +461,7 @@ revoke all on function public.join_household(text) from public;
 revoke all on function public.create_roomie_event(uuid, text, jsonb) from public;
 revoke all on function public.update_replacement_debt(uuid, text) from public;
 revoke all on function public.mark_replacement_purchased(uuid) from public;
-revoke all on function public.create_group_expense(uuid, text, numeric, text, text, text, jsonb) from public;
+revoke all on function public.create_group_expense(uuid, text, numeric, text, text, text, text, jsonb) from public;
 revoke all on function public.update_group_expense_payment(uuid, uuid, text) from public;
 revoke all on function public.leave_household(uuid) from public;
 grant execute on function public.create_household(text) to authenticated;
@@ -437,7 +469,7 @@ grant execute on function public.join_household(text) to authenticated;
 grant execute on function public.create_roomie_event(uuid, text, jsonb) to authenticated;
 grant execute on function public.update_replacement_debt(uuid, text) to authenticated;
 grant execute on function public.mark_replacement_purchased(uuid) to authenticated;
-grant execute on function public.create_group_expense(uuid, text, numeric, text, text, text, jsonb) to authenticated;
+grant execute on function public.create_group_expense(uuid, text, numeric, text, text, text, text, jsonb) to authenticated;
 grant execute on function public.update_group_expense_payment(uuid, uuid, text) to authenticated;
 grant execute on function public.leave_household(uuid) to authenticated;
 

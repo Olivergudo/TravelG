@@ -92,12 +92,13 @@ export async function markReplacementPurchased(debtId: string) {
   if (error) throw error;
 }
 
-export async function createGroupExpense(input: { householdId: string; concept: string; totalAmount: number; currency: "CLP" | "MXN" | "USD" | "EUR"; category?: string; notes?: string; shares: Array<{ userId: string; amount: number }> }) {
+export async function createGroupExpense(input: { householdId: string; concept: string; totalAmount: number; currency: "CLP" | "MXN" | "USD" | "EUR"; scope: "group" | "personal"; category?: string; notes?: string; shares: Array<{ userId: string; amount: number }> }) {
   const { data, error } = await configured().rpc("create_group_expense", {
     target_household: input.householdId,
     expense_concept: input.concept,
     expense_total: input.totalAmount,
     expense_currency: input.currency,
+    expense_scope: input.scope,
     expense_category: input.category || null,
     expense_notes: input.notes || null,
     participant_shares: input.shares,

@@ -7,7 +7,7 @@ const base: RoomieObligations = {
   householdId: "home",
   members: [],
   debts: [{ id: "d1", household_id: "home", debtor_user_id: "debtor", owner_user_id: "owner", product_name: "Leche", status: "pending", created_at: "", replacement_reported_at: null, resolved_at: null, confirmed_by: null, purchased_at: "2026-08-15" }],
-  groupExpenses: [{ id: "e1", household_id: "home", creator_id: "owner", payer_id: "owner", concept: "Internet", total_amount: 30, currency: "USD", category: null, notes: null, status: "partially_paid", created_at: "", resolved_at: null, group_expense_shares: [
+  groupExpenses: [{ id: "e1", household_id: "home", creator_id: "owner", payer_id: "owner", concept: "Internet", total_amount: 30, currency: "USD", scope: "group", category: null, notes: null, status: "partially_paid", created_at: "", resolved_at: null, group_expense_shares: [
     { id: "s1", expense_id: "e1", user_id: "a", amount: 10, status: "confirmed_paid", reported_at: "", confirmed_at: "" },
     { id: "s2", expense_id: "e1", user_id: "b", amount: 10, status: "reported_paid", reported_at: "", confirmed_at: null },
   ] }],
