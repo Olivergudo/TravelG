@@ -6,7 +6,6 @@ export async function GET(request: Request) {
   if ("error" in result) return result.error;
   const search =
     new URL(request.url).searchParams.get("search")?.trim().slice(0, 100) || "";
-  if (search.length < 2) return Response.json({ users: [] });
   const admin = serviceSupabase();
   if (!admin)
     return Response.json(
@@ -17,13 +16,13 @@ export async function GET(request: Request) {
     .replace(/[,()%_]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
-  if (safe.length < 2) return Response.json({ users: [] });
-  const { data, error } = await admin
+  let query = admin
     .from("profiles")
     .select("id,email,display_name,role,plan,pro_expires_at,created_at")
-    .or(`email.ilike.%${safe}%,display_name.ilike.%${safe}%`)
     .order("created_at", { ascending: false })
-    .limit(20);
+    .limit(1000);
+  if (safe) query = query.or(`email.ilike.%${safe}%,display_name.ilike.%${safe}%`);
+  const { data, error } = await query;
   if (error)
     return Response.json(
       { error: "No pudimos buscar usuarios." },

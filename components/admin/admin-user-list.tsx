@@ -13,9 +13,6 @@ export function AdminUserList() {
   const [selected, setSelected] = useState<AdminUser>();
   const [error, setError] = useState("");
   useEffect(() => {
-    if (search.trim().length < 2) {
-      return;
-    }
     const controller = new AbortController();
     const timer = window.setTimeout(async () => {
       setLoading(true);
@@ -31,7 +28,7 @@ export function AdminUserList() {
       } finally {
         if (!controller.signal.aborted) setLoading(false);
       }
-    }, 350);
+    }, search.trim() ? 350 : 0);
     return () => {
       controller.abort();
       window.clearTimeout(timer);
@@ -86,22 +83,16 @@ export function AdminUserList() {
             Buscando…
           </p>
         ) : (
-          search.trim().length >= 2 &&
           users.map((user) => (
             <AdminUserRow key={user.id} user={user} change={setSelected} />
           ))
         )}
       </div>
-      {!loading && search.trim().length >= 2 && !users.length && !error && (
+      {!loading && !users.length && !error && (
         <div className="py-10 text-center text-[#718078]">
           <Users className="mx-auto mb-2" />
           <p>No encontramos usuarios.</p>
         </div>
-      )}
-      {search.trim().length < 2 && (
-        <p className="mt-4 text-center text-sm text-[#718078]">
-          Escribe al menos dos caracteres para buscar.
-        </p>
       )}
       {selected && (
         <ChangePlanDialog
