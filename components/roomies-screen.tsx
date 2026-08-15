@@ -197,9 +197,9 @@ function ChatView({ userId, data, openActions, openPending, reload }: { userId: 
     catch { setError("No pudimos enviar el mensaje. Revisa tu conexión."); }
     finally { setSending(false); }
   };
-  return <div className="px-4 pb-24">
+  return <div className="flex min-h-[calc(100dvh-5rem-env(safe-area-inset-bottom))] flex-col px-4 pb-[70px]">
     <PendingAlert userId={userId} data={data} open={openPending}/>
-    <div className="mt-4 min-h-[36dvh] space-y-2.5 pb-4">
+    <div className="mt-4 flex flex-1 flex-col justify-end gap-2.5">
       {data.messages.length === 0 && (
         <Empty icon={<MessageCircle/>} title={t("roomies.chat")} text={t("roomies.tagline")}/>
       )}
