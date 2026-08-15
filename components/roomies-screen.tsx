@@ -194,7 +194,7 @@ function ChatView({ userId, data, openActions, openPending, reload }: { userId: 
     catch { setError("No pudimos enviar el mensaje. Revisa tu conexión."); }
     finally { setSending(false); }
   };
-  return <div className="flex min-h-0 flex-1 flex-col px-4 pb-[calc(5rem+env(safe-area-inset-bottom)+8px)]">
+  return <div className="flex min-h-0 flex-1 flex-col px-4 pb-[calc(5rem+env(safe-area-inset-bottom))]">
     <PendingAlert userId={userId} data={data} open={openPending}/>
     <div className="mt-4 min-h-0 flex-1 overflow-y-auto overscroll-contain">
       <div className="flex min-h-full flex-col justify-end gap-2.5 [&>*]:shrink-0">
