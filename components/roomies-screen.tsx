@@ -95,7 +95,7 @@ export function RoomiesScreen({
   if (!ready) return <ScreenLoader />;
   if (!data.household) return <RoomiesWelcome error={error} open={setSheet} reload={reload} sheet={sheet} />;
   return (
-    <section className="min-h-dvh pb-24">
+    <section className="flex h-dvh min-h-0 flex-col overflow-hidden pb-[calc(5rem+env(safe-area-inset-bottom))]">
       <RoomiesHeader household={data.household} members={data.members} openMenu={() => setSheet("household")} />
       <div className="mx-4 grid grid-cols-2 rounded-2xl bg-black/[.045] p-1 dark:bg-white/[.045]">
         <button type="button" onClick={() => setView("chat")} className={`min-h-11 rounded-xl text-sm font-bold ${view === "chat" ? "theme-card bg-white text-[#176b46] shadow-sm" : "text-[#718078]"}`}>{t("roomies.chat")}</button>
@@ -106,7 +106,7 @@ export function RoomiesScreen({
       {view === "chat" ? (
         <ChatView userId={userId} data={data} openActions={() => setSheet("actions")} openPending={() => setView("pending")} reload={reload} />
       ) : (
-        <DebtsView userId={userId} data={data} reload={reload} />
+        <div className="min-h-0 flex-1 overflow-y-auto"><DebtsView userId={userId} data={data} reload={reload} /></div>
       )}
       {sheet && (
         <RoomieSheet
@@ -197,9 +197,9 @@ function ChatView({ userId, data, openActions, openPending, reload }: { userId: 
     catch { setError("No pudimos enviar el mensaje. Revisa tu conexión."); }
     finally { setSending(false); }
   };
-  return <div className="flex min-h-[calc(100dvh-5rem-env(safe-area-inset-bottom))] flex-col px-4 pb-[70px]">
+  return <div className="flex min-h-0 flex-1 flex-col px-4 pb-2">
     <PendingAlert userId={userId} data={data} open={openPending}/>
-    <div className="mt-4 flex flex-1 flex-col justify-end gap-2.5">
+    <div className="mt-4 flex min-h-0 flex-1 flex-col justify-end gap-2.5 overflow-y-auto overscroll-contain">
       {data.messages.length === 0 && (
         <Empty icon={<MessageCircle/>} title={t("roomies.chat")} text={t("roomies.tagline")}/>
       )}
@@ -207,7 +207,7 @@ function ChatView({ userId, data, openActions, openPending, reload }: { userId: 
       <div ref={endRef}/>
     </div>
     {error && <p role="alert" className="mt-3 text-sm text-red-600">{error}</p>}
-    <div className="theme-card fixed inset-x-4 bottom-[calc(5rem+env(safe-area-inset-bottom)+10px)] z-20 mx-auto flex max-w-[calc(42rem-2rem)] items-center gap-2 rounded-2xl border border-black/[.07] bg-white p-2 shadow-[0_8px_24px_rgba(0,0,0,.09)]">
+    <div className="theme-card mt-2.5 flex shrink-0 items-center gap-2 rounded-2xl border border-black/[.07] bg-white p-2 shadow-[0_8px_24px_rgba(0,0,0,.09)]">
       <button type="button" onClick={openActions} aria-label="Acciones especiales" className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-[#e3f2e9] text-[#176b46]"><Plus/></button>
       <input data-i18n-ignore value={message} onChange={(event) => setMessage(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void submit(); }} maxLength={1000} placeholder={t("roomies.typeMessage")} className="min-w-0 flex-1 bg-transparent px-1 text-base outline-none"/>
       <button type="button" onClick={() => void submit()} disabled={!message.trim() || sending} aria-label={t("roomies.send")} className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-[#176b46] text-white disabled:opacity-40">{sending ? <LoaderCircle className="animate-spin" size={19}/> : <Send size={19}/>}</button>
