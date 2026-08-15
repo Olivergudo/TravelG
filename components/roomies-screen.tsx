@@ -93,18 +93,18 @@ export function RoomiesScreen({
   if (!ready) return <ScreenLoader />;
   if (!data.household) return <RoomiesWelcome error={error} open={setSheet} reload={reload} sheet={sheet} />;
   return (
-    <section className="flex h-dvh min-h-0 flex-col overflow-hidden">
+    <section className="fixed inset-x-0 bottom-[calc(5rem+env(safe-area-inset-bottom))] top-0 mx-auto flex min-h-0 w-full max-w-2xl flex-col overflow-hidden">
       <RoomiesHeader household={data.household} members={data.members} openMenu={() => setSheet("household")} />
       <div className="mx-4 grid grid-cols-2 rounded-2xl bg-black/[.045] p-1 dark:bg-white/[.045]">
-        <button type="button" onClick={() => setView("chat")} className={`min-h-11 rounded-xl text-sm font-bold ${view === "chat" ? "theme-card bg-white text-[#176b46] shadow-sm" : "text-[#718078]"}`}>{t("roomies.chat")}</button>
-        <button type="button" onClick={() => setView("pending")} className={`min-h-11 rounded-xl text-sm font-bold ${view === "pending" ? "theme-card bg-white text-[#176b46] shadow-sm" : "text-[#718078]"}`}>{t("roomies.pending")}</button>
+        <button type="button" onClick={() => setView("chat")} className={`min-h-12 rounded-xl text-sm font-bold sm:min-h-11 ${view === "chat" ? "theme-card bg-white text-[#176b46] shadow-sm" : "text-[#718078]"}`}>{t("roomies.chat")}</button>
+        <button type="button" onClick={() => setView("pending")} className={`min-h-12 rounded-xl text-sm font-bold sm:min-h-11 ${view === "pending" ? "theme-card bg-white text-[#176b46] shadow-sm" : "text-[#718078]"}`}>{t("roomies.pending")}</button>
       </div>
       {error && <p role="alert" className="mx-4 mt-3 rounded-2xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}
       <NotificationPrompt />
       {view === "chat" ? (
         <ChatView userId={userId} data={data} openActions={() => setSheet("actions")} openPending={() => setView("pending")} reload={reload} />
       ) : (
-        <div className="min-h-0 flex-1 overflow-y-auto pb-[calc(5rem+env(safe-area-inset-bottom))]"><DebtsView userId={userId} data={data} reload={reload} /></div>
+        <div className="min-h-0 flex-1 overflow-y-auto"><DebtsView userId={userId} data={data} reload={reload} /></div>
       )}
       {sheet && (
         <RoomieSheet
@@ -170,11 +170,11 @@ function OnboardingSheet({ sheet, close, completed }: { sheet: Sheet; close: () 
 function RoomiesHeader({ household, members, openMenu }: { household: Household; members: HouseholdMember[]; openMenu: () => void }) {
   const { t } = useI18n();
   const [copied, setCopied] = useState(false);
-  return <header className="px-5 pb-5 pt-[max(2rem,env(safe-area-inset-top))]">
-    <p className="text-xs font-extrabold uppercase tracking-[.2em] text-[#6f8278]">Roomies</p>
-    <div className="mt-1 flex items-start justify-between gap-3">
-      <div className="min-w-0"><h1 className="truncate text-[30px] font-bold tracking-[-.03em]">{household.name}</h1><p className="mt-1 line-clamp-2 text-sm text-[#718078]">{members.map((member) => member.display_name).join(" · ")}</p></div>
-      <div className="flex shrink-0 gap-2"><button type="button" onClick={async () => { await navigator.clipboard.writeText(household.invite_code); setCopied(true); window.setTimeout(() => setCopied(false), 1500); }} className="theme-card flex min-h-11 items-center gap-2 rounded-xl border border-black/[.07] bg-white px-3 text-xs font-bold text-[#176b46]" aria-label={t("roomies.copyInvite")}><Copy size={16}/>{copied ? t("roomies.copied") : household.invite_code}</button><button type="button" onClick={openMenu} aria-label={t("roomies.viewMembers")} className="theme-card grid h-11 w-11 place-items-center rounded-xl border border-black/[.07] bg-white text-[#176b46]"><Users size={20}/></button></div>
+  return <header className="px-4 pb-3 pt-[max(1rem,env(safe-area-inset-top))] sm:px-5 sm:pb-5 sm:pt-[max(2rem,env(safe-area-inset-top))]">
+    <p className="text-[11px] font-extrabold uppercase tracking-[.18em] text-[#6f8278] sm:text-xs sm:tracking-[.2em]">Roomies</p>
+    <div className="mt-0.5 flex items-start justify-between gap-2 sm:mt-1 sm:gap-3">
+      <div className="min-w-0"><h1 className="truncate text-[28px] font-bold leading-tight tracking-[-.03em] sm:text-[30px]">{household.name}</h1><p className="mt-0.5 line-clamp-1 text-sm leading-tight text-[#718078] sm:mt-1 sm:line-clamp-2 sm:leading-normal">{members.map((member) => member.display_name).join(" · ")}</p></div>
+      <div className="flex shrink-0 gap-1.5 sm:gap-2"><button type="button" onClick={async () => { await navigator.clipboard.writeText(household.invite_code); setCopied(true); window.setTimeout(() => setCopied(false), 1500); }} className="theme-card flex h-12 items-center gap-1.5 rounded-xl border border-black/[.07] bg-white px-2.5 text-[11px] font-bold text-[#176b46] sm:min-h-11 sm:gap-2 sm:px-3 sm:text-xs" aria-label={t("roomies.copyInvite")}><Copy size={15}/>{copied ? t("roomies.copied") : household.invite_code}</button><button type="button" onClick={openMenu} aria-label={t("roomies.viewMembers")} className="theme-card grid h-12 w-12 place-items-center rounded-xl border border-black/[.07] bg-white text-[#176b46] sm:h-11 sm:w-11"><Users size={18}/></button></div>
     </div>
   </header>;
 }
@@ -194,9 +194,9 @@ function ChatView({ userId, data, openActions, openPending, reload }: { userId: 
     catch { setError("No pudimos enviar el mensaje. Revisa tu conexión."); }
     finally { setSending(false); }
   };
-  return <div className="flex min-h-0 flex-1 flex-col px-4 pb-[calc(5rem+env(safe-area-inset-bottom))]">
+  return <div className="flex min-h-0 flex-1 flex-col px-4">
     <PendingAlert userId={userId} data={data} open={openPending}/>
-    <div className="mt-4 min-h-0 flex-1 overflow-y-auto overscroll-contain">
+    <div className="mt-2 min-h-0 flex-1 overflow-y-auto overscroll-contain sm:mt-4">
       <div className="flex min-h-full flex-col justify-end gap-2.5 [&>*]:shrink-0">
         {data.messages.length === 0 && (
           <Empty icon={<MessageCircle/>} title={t("roomies.chat")} text={t("roomies.tagline")}/>
@@ -206,7 +206,7 @@ function ChatView({ userId, data, openActions, openPending, reload }: { userId: 
       </div>
     </div>
     {error && <p role="alert" className="mt-3 text-sm text-red-600">{error}</p>}
-    <div className="theme-card mt-2.5 flex shrink-0 items-center gap-2 rounded-2xl border border-black/[.07] bg-white p-2 shadow-[0_8px_24px_rgba(0,0,0,.09)]">
+    <div className="theme-card mb-[10px] mt-[10px] flex shrink-0 items-center gap-2 rounded-2xl border border-black/[.07] bg-white p-2 shadow-[0_8px_24px_rgba(0,0,0,.09)]">
       <button type="button" onClick={openActions} aria-label="Acciones especiales" className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-[#e3f2e9] text-[#176b46]"><Plus/></button>
       <input data-i18n-ignore value={message} onChange={(event) => setMessage(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void submit(); }} maxLength={1000} placeholder={t("roomies.typeMessage")} className="min-w-0 flex-1 bg-transparent px-1 text-base outline-none"/>
       <button type="button" onClick={() => void submit()} disabled={!message.trim() || sending} aria-label={t("roomies.send")} className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-[#176b46] text-white disabled:opacity-40">{sending ? <LoaderCircle className="animate-spin" size={19}/> : <Send size={19}/>}</button>
@@ -224,7 +224,7 @@ function PendingAlert({ userId, data, open }: { userId: string; data: RoomiesDat
     const expense = pendingExpenses[0];
     const myShare = expense.group_expense_shares.find((share) => share.user_id === userId);
     const payer = data.members.find((member) => member.user_id === expense.payer_id)?.display_name || t("roomies.member");
-    return <button type="button" onClick={open} aria-label={t("activities.pending.view")} className="theme-card mt-4 flex min-h-[92px] w-full items-center gap-3 rounded-[22px] border border-amber-400/30 bg-white p-4 text-left shadow-sm transition active:scale-[.99]"><span className="relative grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-amber-400/15 text-amber-500"><CircleDollarSign size={22}/>{pendingCount > 1 && <b className="absolute -right-1.5 -top-1.5 grid h-5 min-w-5 place-items-center rounded-full bg-amber-500 px-1 text-[10px] text-white">{pendingCount}</b>}</span><span className="min-w-0 flex-1"><b className="block text-sm">{count("activities.pending.count", pendingCount)}</b><span className="mt-1 block truncate text-sm text-[#587067]">{pendingCount === 1 && myShare ? t("roomies.groupExpense.pendingFrom", { payer, amount: formatGroupAmount(Number(myShare.amount), expense.currency) }) : t("activities.pending.multipleHint")}</span></span><ChevronRight className="shrink-0 text-amber-500" size={21}/></button>;
+    return <button type="button" onClick={open} aria-label={t("activities.pending.view")} className="theme-card mt-3 flex min-h-[76px] w-full items-center gap-2.5 rounded-[22px] border border-amber-400/30 bg-white p-3 text-left shadow-sm transition active:scale-[.99] sm:mt-4 sm:min-h-[92px] sm:gap-3 sm:p-4"><span className="relative grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-amber-400/15 text-amber-500 sm:h-11 sm:w-11"><CircleDollarSign size={19}/>{pendingCount > 1 && <b className="absolute -right-1.5 -top-1.5 grid h-5 min-w-5 place-items-center rounded-full bg-amber-500 px-1 text-[10px] text-white">{pendingCount}</b>}</span><span className="min-w-0 flex-1"><b className="block text-[13px] sm:text-sm">{count("activities.pending.count", pendingCount)}</b><span className="mt-0.5 block truncate text-xs text-[#587067] sm:mt-1 sm:text-sm">{pendingCount === 1 && myShare ? t("roomies.groupExpense.pendingFrom", { payer, amount: formatGroupAmount(Number(myShare.amount), expense.currency) }) : t("activities.pending.multipleHint")}</span></span><ChevronRight className="shrink-0 text-amber-500" size={19}/></button>;
   }
   const debt = pending[0];
   const names = new Map(data.members.map((member) => [member.user_id, member.display_name]));
@@ -245,10 +245,10 @@ function PendingAlert({ userId, data, open }: { userId: string; data: RoomiesDat
       : t("activities.pending.ownerReported", { debtor, product: debt.product_name });
     detail = debt.status === "pending" ? t("roomies.pendingReplacement") : t("roomies.activity.awaiting");
   }
-  return <button type="button" onClick={open} aria-label={t("activities.pending.view")} className="theme-card mt-4 flex min-h-[92px] w-full items-center gap-3 rounded-[22px] border border-amber-400/30 bg-white p-4 text-left shadow-sm transition active:scale-[.99]">
-    <span className="relative grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-amber-400/15 text-amber-500"><Bell size={21}/>{pendingCount > 1 && <b className="absolute -right-1.5 -top-1.5 grid h-5 min-w-5 place-items-center rounded-full bg-amber-500 px-1 text-[10px] text-white">{pendingCount}</b>}</span>
-    <span className="min-w-0 flex-1"><b className="block text-sm">{count("activities.pending.count", pendingCount)}</b><span className="mt-1 block truncate text-sm text-[#587067]">{pendingCount > 1 ? t("activities.pending.multipleHint") : description}</span>{pendingCount === 1 && detail && <small className="mt-0.5 block truncate font-semibold text-amber-600">{detail}</small>}</span>
-    <ChevronRight className="shrink-0 text-amber-500" size={21}/>
+  return <button type="button" onClick={open} aria-label={t("activities.pending.view")} className="theme-card mt-3 flex min-h-[76px] w-full items-center gap-2.5 rounded-[22px] border border-amber-400/30 bg-white p-3 text-left shadow-sm transition active:scale-[.99] sm:mt-4 sm:min-h-[92px] sm:gap-3 sm:p-4">
+    <span className="relative grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-amber-400/15 text-amber-500 sm:h-11 sm:w-11"><Bell size={19}/>{pendingCount > 1 && <b className="absolute -right-1.5 -top-1.5 grid h-5 min-w-5 place-items-center rounded-full bg-amber-500 px-1 text-[10px] text-white">{pendingCount}</b>}</span>
+    <span className="min-w-0 flex-1"><b className="block text-[13px] sm:text-sm">{count("activities.pending.count", pendingCount)}</b><span className="mt-0.5 block truncate text-xs text-[#587067] sm:mt-1 sm:text-sm">{pendingCount > 1 ? t("activities.pending.multipleHint") : description}</span>{pendingCount === 1 && detail && <small className="mt-0.5 block truncate text-[11px] font-semibold text-amber-600 sm:text-xs">{detail}</small>}</span>
+    <ChevronRight className="shrink-0 text-amber-500" size={19}/>
   </button>;
 }
 
