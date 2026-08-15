@@ -1,5 +1,6 @@
 import type { es } from "./es";
 export const en: Record<keyof typeof es, string> = {
+  "common.copy": "Copy", "roomies.houseDetails": "Household information", "roomies.house": "Household", "roomies.membersTitle": "Members", "roomies.actionsTitle": "Actions", "roomies.inviteMember": "Invite member", "roomies.inviteText": "Join {household} with code {code}.",
   "roomies.editMessage": "Edit message", "roomies.editAccount": "Edit account", "roomies.editError": "We couldn't save the changes.",
   "common.close": "Close", "common.back": "Back", "common.save": "Save", "common.cancel": "Cancel", "common.delete": "Delete", "common.edit": "Edit", "common.loading": "Loading…", "common.saving": "Saving…", "common.tryAgain": "Try again", "common.today": "Today", "common.yesterday": "Yesterday",
   "nav.finances": "Finance", "nav.fridge": "Fridge", "nav.roomies": "Roomies",

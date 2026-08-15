@@ -1,5 +1,6 @@
 import type { es } from "./es";
 export const fr: Record<keyof typeof es, string> = {
+  "common.copy": "Copier", "roomies.houseDetails": "Informations du foyer", "roomies.house": "Foyer", "roomies.membersTitle": "Membres", "roomies.actionsTitle": "Actions", "roomies.inviteMember": "Inviter un membre", "roomies.inviteText": "Rejoignez {household} avec le code {code}.",
   "roomies.editMessage": "Modifier le message", "roomies.editAccount": "Modifier la dépense", "roomies.editError": "Impossible d’enregistrer les modifications.",
   "common.close":"Fermer","common.back":"Retour","common.save":"Enregistrer","common.cancel":"Annuler","common.delete":"Supprimer","common.edit":"Modifier","common.loading":"Chargement…","common.saving":"Enregistrement…","common.tryAgain":"Réessayer","common.today":"Aujourd’hui","common.yesterday":"Hier",
   "nav.finances":"Finances","nav.fridge":"Réfrigérateur","nav.roomies":"Roomies",

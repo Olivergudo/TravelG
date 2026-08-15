@@ -50,6 +50,19 @@ html[data-app-theme="dark"] body {
 .sheet {
   animation: up 0.2s ease-out;
 }
+.roomies-sheet-down {
+  animation: roomies-sheet-down 0.2s ease-out;
+}
+@keyframes roomies-sheet-down {
+  from {
+    transform: translateY(-20px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
 @keyframes up {
   from {
     transform: translateY(20px);

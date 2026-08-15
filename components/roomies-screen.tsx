@@ -97,7 +97,7 @@ export function RoomiesScreen({
   if (!data.household) return <RoomiesWelcome error={error} open={setSheet} reload={reload} sheet={sheet} />;
   return (
     <section className="fixed inset-x-0 bottom-[calc(5rem+env(safe-area-inset-bottom))] top-0 z-40 mx-auto flex min-h-0 w-full max-w-2xl flex-col">
-      <RoomiesHeader household={data.household} members={data.members} openMenu={() => setSheet("household")} />
+      <RoomiesHeader household={data.household} openMenu={() => setSheet("household")} />
       <div className="mx-4 grid grid-cols-2 rounded-2xl bg-black/[.045] p-1 dark:bg-white/[.045]">
         <button type="button" onClick={() => setView("chat")} className={`min-h-12 rounded-xl text-sm font-bold sm:min-h-11 ${view === "chat" ? "theme-card bg-white text-[#176b46] shadow-sm" : "text-[#718078]"}`}>{t("roomies.chat")}</button>
         <button type="button" onClick={() => setView("pending")} className={`min-h-12 rounded-xl text-sm font-bold sm:min-h-11 ${view === "pending" ? "theme-card bg-white text-[#176b46] shadow-sm" : "text-[#718078]"}`}>{t("roomies.pending")}</button>
@@ -170,15 +170,11 @@ function OnboardingSheet({ sheet, close, completed }: { sheet: Sheet; close: () 
   </SheetFrame>;
 }
 
-function RoomiesHeader({ household, members, openMenu }: { household: Household; members: HouseholdMember[]; openMenu: () => void }) {
+function RoomiesHeader({ household, openMenu }: { household: Household; openMenu: () => void }) {
   const { t } = useI18n();
-  const [copied, setCopied] = useState(false);
-  return <header className="px-4 pb-3 pt-[max(1rem,env(safe-area-inset-top))] sm:px-5 sm:pb-5 sm:pt-[max(2rem,env(safe-area-inset-top))]">
-    <p className="text-[11px] font-extrabold uppercase tracking-[.18em] text-[#6f8278] sm:text-xs sm:tracking-[.2em]">Roomies</p>
-    <div className="mt-0.5 flex items-start justify-between gap-2 sm:mt-1 sm:gap-3">
-      <div className="min-w-0"><h1 className="truncate text-[28px] font-bold leading-tight tracking-[-.03em] sm:text-[30px]">{household.name}</h1><p className="mt-0.5 line-clamp-1 text-sm leading-tight text-[#718078] sm:mt-1 sm:line-clamp-2 sm:leading-normal">{members.map((member) => member.display_name).join(" · ")}</p></div>
-      <div className="flex shrink-0 gap-1.5 sm:gap-2"><button type="button" onClick={async () => { await navigator.clipboard.writeText(household.invite_code); setCopied(true); window.setTimeout(() => setCopied(false), 1500); }} className="theme-card flex h-12 items-center gap-1.5 rounded-xl border border-black/[.07] bg-white px-2.5 text-[11px] font-bold text-[#176b46] sm:min-h-11 sm:gap-2 sm:px-3 sm:text-xs" aria-label={t("roomies.copyInvite")}><Copy size={15}/>{copied ? t("roomies.copied") : household.invite_code}</button><button type="button" onClick={openMenu} aria-label={t("roomies.viewMembers")} className="theme-card grid h-12 w-12 place-items-center rounded-xl border border-black/[.07] bg-white text-[#176b46] sm:h-11 sm:w-11"><Users size={18}/></button></div>
-    </div>
+  return <header className="flex items-center justify-between gap-3 px-4 pb-2 pt-[max(.75rem,env(safe-area-inset-top))] sm:px-5 sm:pb-3 sm:pt-[max(1rem,env(safe-area-inset-top))]">
+    <h1 className="min-w-0 truncate text-[22px] font-bold leading-tight tracking-[-.03em] sm:text-2xl">{household.name}</h1>
+    <button type="button" onClick={openMenu} aria-label={t("roomies.viewMembers")} className="theme-card grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-black/[.07] bg-white text-[#176b46]"><Users size={18}/></button>
   </header>;
 }
 
@@ -353,10 +349,10 @@ function MessageCard({ item, mine, actor, names, debts, groupExpenses, userId, h
     {actionError && <p role="alert" className="mt-2 text-xs font-semibold text-red-600">{actionError}</p>}
   </article>;
   return <><div className={`flex ${mine ? "justify-end" : "justify-start"}`}>
-    <article {...(mine ? longPress : {})} className={`${mine ? "bg-[#176b46] text-white" : "theme-card bg-white"} w-fit min-w-[min(140px,70vw)] max-w-[82%] rounded-2xl px-4 py-3 shadow-sm md:max-w-[65%]`}>
-      <p className={`break-words text-xs font-bold ${mine ? "text-white/70" : "text-[#176b46]"}`}>{actor}</p>
-      <p data-i18n-ignore className="mt-1 whitespace-pre-wrap break-words text-sm leading-relaxed">{text}</p>
-      <time className={`ml-auto mt-1 block w-fit text-[11px] ${mine ? "text-white/55" : "text-[#839087]"}`}>{time}</time>
+    <article {...(mine ? longPress : {})} className={`${mine ? "max-w-[78%] bg-[#176b46] text-white" : "theme-card max-w-[84%] bg-white"} w-fit rounded-2xl px-3 py-2.5 shadow-sm md:max-w-[65%]`}>
+      {!mine && <p className="break-words text-[14px] font-semibold leading-tight text-[#176b46]">{actor}</p>}
+      <p data-i18n-ignore className={`${mine ? "" : "mt-0.5"} whitespace-pre-wrap break-words text-[13px] font-normal leading-snug`}>{text}</p>
+      <time className={`ml-auto mt-0.5 block w-fit text-[11px] leading-none ${mine ? "text-white/55" : "text-[#839087]"}`}>{time}</time>
     </article>
   </div>
   {menuOpen && (
@@ -577,6 +573,7 @@ function HouseholdMenu({ household, members, userId, close, completed }: { house
   const { t, count } = useI18n();
   const [confirming, setConfirming] = useState(false);
   const [leaving, setLeaving] = useState(false);
+  const [copied, setCopied] = useState(false);
   const [error, setError] = useState("");
   const me = members.find((member) => member.user_id === userId);
   const ownerWithOthers = me?.role === "owner" && members.length > 1;
@@ -586,6 +583,11 @@ function HouseholdMenu({ household, members, userId, close, completed }: { house
     try { await leaveHousehold(household.id); close(); await completed(); }
     catch { setError(t("roomies.leaveError")); setLeaving(false); }
   };
+  const copyInvite = async () => {
+    await navigator.clipboard.writeText(household.invite_code);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1500);
+  };
   if (confirming) return <SheetFrame close={() => setConfirming(false)} title={t("roomies.leaveTitle")}>
     <p className="text-sm leading-relaxed text-[#587067]">{t("roomies.leaveHint", { household: household.name })}</p>
     {ownerWithOthers && <p className="mt-3 rounded-2xl bg-[#e3f2e9] p-3 text-sm text-[#176b46]">Eres el propietario. La propiedad se transferirá automáticamente al miembro más antiguo.</p>}
@@ -593,10 +595,16 @@ function HouseholdMenu({ household, members, userId, close, completed }: { house
     {error && <p role="alert" className="mt-3 text-sm text-red-600">{error}</p>}
     <div className="mt-5 grid grid-cols-2 gap-2"><button type="button" onClick={() => setConfirming(false)} className="theme-card min-h-12 rounded-xl border border-black/10 bg-white font-bold">{t("common.cancel")}</button><button type="button" disabled={leaving} onClick={() => void leave()} className="flex min-h-12 items-center justify-center gap-2 rounded-xl bg-red-600 px-3 font-bold text-white disabled:opacity-50">{leaving ? <LoaderCircle size={18} className="animate-spin"/> : <LogOut size={18}/>} {t("roomies.leaveConfirm")}</button></div>
   </SheetFrame>;
-  return <SheetFrame close={close} title={t("roomies.participants")}>
-    <p className="-mt-3 mb-4 text-sm text-[#718078]">{household.name} · {count("roomies.person", members.length)}</p>
-    <div className="overflow-hidden rounded-2xl border border-black/[.06]">{members.map((member) => <div key={member.id} className="theme-card flex min-h-16 items-center gap-3 border-b border-black/[.06] bg-white px-4 last:border-0"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#e3f2e9] font-bold text-[#176b46]">{member.display_name.trim().charAt(0).toUpperCase()}</span><span className="min-w-0 flex-1"><b className="block truncate">{member.display_name}{member.user_id === userId ? ` · ${t("roomies.you")}` : ""}</b><small className="text-[#718078]">{member.role === "owner" ? t("roomies.owner") : t("roomies.member")}</small></span>{member.role === "owner" && <span className="rounded-full bg-[#e3f2e9] px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-[#176b46]">{t("roomies.owner")}</span>}</div>)}</div>
-    <button type="button" onClick={() => setConfirming(true)} className="mt-5 flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl border border-red-500/25 text-sm font-bold text-red-600"><LogOut size={18}/> {t("roomies.leave")}</button>
+  return <SheetFrame close={close} title={t("roomies.houseDetails")} compact>
+    <section>
+      <h3 className="text-xs font-extrabold uppercase tracking-[.16em] text-[#718078]">{t("roomies.house")}</h3>
+      <div className="theme-card mt-1.5 rounded-2xl border border-black/[.06] bg-white p-3"><b className="block text-base">{household.name}</b><span className="mt-0.5 block text-[11px] text-[#718078]">{t("roomies.inviteCode")}</span><div className="mt-1.5 flex items-center gap-2"><code className="min-w-0 flex-1 truncate text-sm font-bold text-[#176b46]">{household.invite_code}</code><button type="button" onClick={() => void copyInvite()} className="flex min-h-10 items-center gap-2 rounded-xl bg-[#e3f2e9] px-3 text-xs font-bold text-[#176b46]"><Copy size={15}/>{copied ? t("roomies.copied") : t("common.copy")}</button></div></div>
+    </section>
+    <section className="mt-3">
+      <div className="flex items-center justify-between gap-3"><h3 className="text-xs font-extrabold uppercase tracking-[.16em] text-[#718078]">{t("roomies.membersTitle")}</h3><span className="text-xs text-[#718078]">{count("roomies.person", members.length)}</span></div>
+    <div className="mt-1.5 overflow-hidden rounded-2xl border border-black/[.06]">{members.map((member) => <div key={member.id} className="theme-card flex min-h-14 items-center gap-2.5 border-b border-black/[.06] bg-white px-3 last:border-0"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[#e3f2e9] text-sm font-bold text-[#176b46]">{member.display_name.trim().charAt(0).toUpperCase()}</span><span className="min-w-0 flex-1"><b className="block truncate text-sm">{member.display_name}{member.user_id === userId ? ` · ${t("roomies.you")}` : ""}</b><small className="text-[11px] text-[#718078]">{member.role === "owner" ? t("roomies.owner") : t("roomies.member")}</small></span>{member.role === "owner" && <span className="rounded-full bg-[#e3f2e9] px-2 py-1 text-[9px] font-bold uppercase tracking-wide text-[#176b46]">{t("roomies.owner")}</span>}</div>)}</div>
+    </section>
+    <button type="button" onClick={() => setConfirming(true)} className="mt-3 flex min-h-11 w-full items-center gap-3 rounded-2xl border border-red-500/25 px-4 text-left text-sm font-bold text-red-600"><LogOut size={17}/> {t("roomies.leave")}</button>
   </SheetFrame>;
 }
 
@@ -641,9 +649,10 @@ function NotificationPrompt() {
   </aside>;
 }
 
-function SheetFrame({ close, title, children, aboveComposer = false }: { close: () => void; title: string; children: React.ReactNode; aboveComposer?: boolean }) {
+function SheetFrame({ close, title, children, aboveComposer = false, compact = false }: { close: () => void; title: string; children: React.ReactNode; aboveComposer?: boolean; compact?: boolean }) {
+  const dragStart = useRef<number | null>(null);
   useEffect(() => { const previous = document.body.style.overflow; document.body.style.overflow = "hidden"; return () => { document.body.style.overflow = previous; }; }, []);
-  return <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/55" onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }}><section role="dialog" aria-modal="true" className={`theme-card max-h-[88dvh] overflow-y-auto overscroll-contain bg-white px-5 pt-5 shadow-2xl ${aboveComposer ? "mb-[calc(10rem+env(safe-area-inset-bottom))] w-[calc(100%-2rem)] max-w-[40rem] rounded-[30px] pb-3" : "w-full max-w-2xl rounded-t-[30px] pb-[max(1.5rem,env(safe-area-inset-bottom))]"}`}><div className="mb-5 flex items-center justify-between gap-3"><h2 className="text-2xl font-bold tracking-[-.025em]">{title}</h2><button type="button" onClick={close} aria-label="Cerrar" className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-black/[.045]"><X/></button></div>{children}</section></div>;
+  return <div className={`fixed inset-0 z-[100] flex justify-center bg-black/55 ${compact ? "items-start" : "items-end"}`} onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }}><section role="dialog" aria-modal="true" onTouchStart={(event) => { dragStart.current = event.currentTarget.scrollTop === 0 ? event.touches[0]?.clientY ?? null : null; }} onTouchEnd={(event) => { const end = event.changedTouches[0]?.clientY; if (dragStart.current !== null && end !== undefined && end - dragStart.current > 80) close(); dragStart.current = null; }} className={`theme-card overflow-y-auto overscroll-contain bg-white shadow-2xl ${compact ? "roomies-sheet-down max-h-[80dvh] px-4 pt-[max(.75rem,env(safe-area-inset-top))]" : "max-h-[88dvh] px-5 pt-5"} ${aboveComposer ? "mb-[calc(10rem+env(safe-area-inset-bottom))] w-[calc(100%-2rem)] max-w-[40rem] rounded-[30px] pb-3" : compact ? "w-full max-w-2xl rounded-b-[30px] pb-4 sm:mt-6 sm:max-w-lg sm:rounded-[30px]" : "w-full max-w-2xl rounded-t-[30px] pb-[max(1.5rem,env(safe-area-inset-bottom))]"}`}><div className={`mx-auto h-1.5 w-10 rounded-full bg-black/10 sm:hidden ${compact ? "mb-2" : "mb-3"}`} aria-hidden="true"/><div className={`flex items-center justify-between gap-3 ${compact ? "mb-3" : "mb-5"}`}><h2 className={`${compact ? "text-xl" : "text-2xl"} font-bold tracking-[-.025em]`}>{title}</h2><button type="button" onClick={close} aria-label="Cerrar" className={`${compact ? "h-10 w-10" : "h-11 w-11"} grid shrink-0 place-items-center rounded-full bg-black/[.045]`}><X size={compact ? 19 : 24}/></button></div>{children}</section></div>;
 }
 
 function Action({ icon, label, click }: { icon: React.ReactNode; label: string; click: () => void }) { return <button type="button" onClick={click} className="theme-card mb-2 flex min-h-14 w-full items-center gap-3 rounded-2xl border border-black/[.06] bg-white px-4 text-left font-bold"><span className="text-[#176b46]">{icon}</span>{label}</button>; }

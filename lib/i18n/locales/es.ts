@@ -1,4 +1,5 @@
 export const es = {
+  "common.copy": "Copiar", "roomies.houseDetails": "Información de la casa", "roomies.house": "Casa", "roomies.membersTitle": "Integrantes", "roomies.actionsTitle": "Acciones", "roomies.inviteMember": "Invitar integrante", "roomies.inviteText": "Únete a {household} con el código {code}.",
   "roomies.editMessage": "Editar mensaje", "roomies.editAccount": "Editar cuenta", "roomies.editError": "No pudimos guardar los cambios.",
   "common.close": "Cerrar", "common.back": "Volver", "common.save": "Guardar", "common.cancel": "Cancelar", "common.delete": "Eliminar", "common.edit": "Editar", "common.loading": "Cargando…", "common.saving": "Guardando…", "common.tryAgain": "Intentar nuevamente", "common.today": "Hoy", "common.yesterday": "Ayer",
   "nav.finances": "Finanzas", "nav.fridge": "Refrigerador", "nav.roomies": "Roomies",
