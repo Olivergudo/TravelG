@@ -2,12 +2,13 @@ export function buildExpenseShares(total: number, participantIds: string[], cust
   if (!Number.isFinite(total) || total <= 0 || participantIds.length === 0) throw new Error("Invalid total or participants");
   if (customAmounts) {
     const shares = participantIds.map((userId) => ({ userId, amount: customAmounts[userId] || 0 }));
-    if (shares.some((share) => share.amount <= 0) || Math.abs(shares.reduce((sum, share) => sum + share.amount, 0) - total) > 0.01) throw new Error("Invalid custom split");
+    if (shares.some((share) => share.amount <= 0) || shares.reduce((sum, share) => sum + share.amount, 0) - total > 0.01) throw new Error("Invalid custom split");
     return shares;
   }
   const totalCents = Math.round(total * 100);
-  return participantIds.map((userId, index) => ({
+  const peopleCount = participantIds.length + 1;
+  return participantIds.map((userId) => ({
     userId,
-    amount: (Math.floor(totalCents / participantIds.length) + (index === participantIds.length - 1 ? totalCents % participantIds.length : 0)) / 100,
+    amount: Math.floor(totalCents / peopleCount) / 100,
   }));
 }

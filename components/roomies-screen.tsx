@@ -365,6 +365,14 @@ function GroupExpenseCard({ expense, item, names, actor, userId, reload }: { exp
   const [error, setError] = useState("");
   const payer = names.get(expense.payer_id) || t("roomies.member");
   const myShare = expense.group_expense_shares.find((share) => share.user_id === userId);
+  const singleShare = expense.group_expense_shares.length === 1 ? expense.group_expense_shares[0] : undefined;
+  const personalLabel = singleShare
+    ? expense.payer_id === userId
+      ? t("roomies.groupExpense.owesMe", { participant: names.get(singleShare.user_id) || t("roomies.member") })
+      : singleShare.user_id === userId
+        ? t("roomies.groupExpense.iOwe", { payer })
+        : t("roomies.groupExpense.personalDebt")
+    : t("roomies.groupExpense.cardLabel");
   const reported = expense.group_expense_shares.filter((share) => share.status === "reported_paid");
   const time = new Date(item.created_at).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
   const update = async (participantId: string, operation: "report" | "confirm" | "reject") => {
@@ -382,10 +390,10 @@ function GroupExpenseCard({ expense, item, names, actor, userId, reload }: { exp
   const statusKey = expense.status === "paid" ? "paid" : expense.status === "partially_paid" ? "partiallyPaid" : expense.status === "cancelled" ? "cancelled" : "pending";
   return <details className="theme-card group w-full max-w-[94%] overflow-hidden rounded-[24px] border border-[#A1DBEE]/30 bg-white shadow-sm md:max-w-[78%]">
     <summary className="cursor-pointer list-none p-4 [&::-webkit-details-marker]:hidden">
-      <div className="flex items-center justify-between gap-3"><span className="rounded-full bg-[#A1DBEE]/15 px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wide text-[#5aa8c4]">{t("roomies.groupExpense.cardLabel")}</span><span className="text-[11px] text-[#839087]">{time}</span></div>
-      <strong className="mt-3 block text-3xl tracking-[-.04em]">{formatGroupAmount(Number(expense.total_amount), expense.currency)}</strong>
+      <div className="flex items-center justify-between gap-3"><span className="rounded-full bg-[#A1DBEE]/15 px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wide text-[#5aa8c4]">{personalLabel}</span><span className="text-[11px] text-[#839087]">{time}</span></div>
+      <strong className="mt-3 block text-3xl tracking-[-.04em]">{formatGroupAmount(Number(singleShare?.amount ?? expense.total_amount), expense.currency)}</strong>
       <h3 className="mt-1 text-base font-bold">{expense.concept}</h3>
-      <p className="mt-1 text-sm text-[#718078]">{t("roomies.groupExpense.paidBy", { payer })} · {count("roomies.groupExpense.roomies", expense.group_expense_shares.length)}</p>
+      <p className="mt-1 text-sm text-[#718078]">{singleShare ? t("roomies.groupExpense.totalPaidBy", { payer, total: formatGroupAmount(Number(expense.total_amount), expense.currency) }) : `${t("roomies.groupExpense.paidBy", { payer })} · ${count("roomies.groupExpense.roomies", expense.group_expense_shares.length)}`}</p>
       <span className="mt-3 inline-flex rounded-full bg-amber-400/15 px-2.5 py-1 text-[10px] font-extrabold uppercase text-amber-600">{t(`roomies.groupExpense.${statusKey}`)}</span>
     </summary>
     <div className="border-t border-black/[.06] px-4 pb-4 pt-3">

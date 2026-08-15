@@ -106,6 +106,15 @@ create index if not exists group_expenses_household_status_idx on public.group_e
 create index if not exists group_expense_shares_user_status_idx on public.group_expense_shares(user_id, status);
 create index if not exists push_subscriptions_user_idx on public.push_subscriptions(user_id);
 
+-- Corrige repartos iguales antiguos que asignaron el total completo al único roomie.
+update public.group_expense_shares share
+set amount = round(expense.total_amount / 2, 2)
+from public.group_expenses expense
+where share.expense_id = expense.id
+  and expense.status <> 'paid'
+  and share.amount = expense.total_amount
+  and (select count(*) from public.group_expense_shares sibling where sibling.expense_id = expense.id) = 1;
+
 create or replace function public.is_household_member(target_household uuid)
 returns boolean language sql stable security definer set search_path = public as $$
   select exists (
@@ -322,7 +331,7 @@ begin
   if char_length(trim(expense_concept)) not between 1 and 100 or expense_total <= 0 then raise exception 'Invalid expense'; end if;
   if jsonb_typeof(participant_shares) <> 'array' or jsonb_array_length(participant_shares) = 0 then raise exception 'Participants required'; end if;
   select sum((entry->>'amount')::numeric) into shares_total from jsonb_array_elements(participant_shares) entry;
-  if abs(shares_total - expense_total) > 0.01 then raise exception 'Shares must match total'; end if;
+  if shares_total <= 0 or shares_total - expense_total > 0.01 then raise exception 'Shares cannot exceed total'; end if;
 
   if expense_currency not in ('CLP', 'MXN', 'USD', 'EUR') then raise exception 'Invalid currency'; end if;
   insert into public.group_expenses (household_id, creator_id, payer_id, concept, total_amount, currency, category, notes)
