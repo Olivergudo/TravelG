@@ -194,7 +194,7 @@ function ChatView({ userId, data, openActions, openPending, reload }: { userId: 
   };
   return <div className="flex min-h-0 flex-1 flex-col px-4">
     <PendingAlert userId={userId} data={data} open={openPending}/>
-    <div className="mt-2 min-h-0 flex-1 overflow-y-auto overscroll-contain sm:mt-4">
+    <div className="mt-2 min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-width:none] sm:mt-4 [&::-webkit-scrollbar]:hidden">
       <div className="flex min-h-full flex-col justify-end gap-2.5 [&>*]:shrink-0">
         {data.messages.length === 0 && (
           <Empty icon={<MessageCircle/>} title={t("roomies.chat")} text={t("roomies.tagline")}/>
