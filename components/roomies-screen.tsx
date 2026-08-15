@@ -14,7 +14,6 @@ import {
   Plus,
   Search,
   Send,
-  ShoppingCart,
   LogOut,
   Users,
   X,
@@ -39,7 +38,7 @@ import { useI18n } from "@/lib/i18n";
 import { formatCurrency, type Currency } from "@/lib/currency";
 
 type RoomiesData = Awaited<ReturnType<typeof loadRoomies>>;
-type Sheet = "create" | "join" | "household" | "actions" | "request" | "taken" | "purchased" | "groupExpense" | null;
+type Sheet = "create" | "join" | "household" | "actions" | "request" | "taken" | "groupExpense" | null;
 const groupExpenseCategories = ["food", "transport", "home", "supermarket", "services", "other"] as const;
 
 export function RoomiesScreen({
@@ -115,7 +114,6 @@ export function RoomiesScreen({
           next={setSheet}
           household={data.household}
           members={data.members}
-          debts={data.debts}
           userId={userId}
           currency={currency}
           completed={async () => { setSheet(null); await reload(); }}
@@ -445,17 +443,16 @@ function DebtsView({ userId, data, reload }: { userId: string; data: RoomiesData
   </div>;
 }
 
-function RoomieSheet({ sheet, close, next, household, members, debts, userId, currency, completed }: { sheet: Sheet; close: () => void; next: (sheet: Sheet) => void; household: Household; members: HouseholdMember[]; debts: ReplacementDebt[]; userId: string; currency: Currency; completed: () => Promise<void> }) {
+function RoomieSheet({ sheet, close, next, household, members, userId, currency, completed }: { sheet: Sheet; close: () => void; next: (sheet: Sheet) => void; household: Household; members: HouseholdMember[]; userId: string; currency: Currency; completed: () => Promise<void> }) {
   const { t } = useI18n();
   if (sheet === "household") return <HouseholdMenu household={household} members={members} userId={userId} close={close} completed={completed}/>;
   if (sheet === "actions") return <SheetFrame title={t("roomies.actions")} close={close}>
     <Action icon={<Search/>} label={t("roomies.ask")} click={() => next("request")}/>
     <Action icon={<PackageCheck/>} label={t("roomies.taken")} click={() => next("taken")}/>
-    <Action icon={<ShoppingCart/>} label={t("roomies.purchased")} click={() => next("purchased")}/>
     <Action icon={<CircleDollarSign/>} label={t("roomies.groupExpense.action")} click={() => next("groupExpense")}/>
   </SheetFrame>;
   if (sheet === "groupExpense") return <GroupExpenseForm close={close} household={household} members={members} userId={userId} currency={currency} completed={completed}/>;
-  return <EventForm kind={sheet as "request" | "taken" | "purchased"} close={close} household={household} members={members} debts={debts} userId={userId} completed={completed}/>;
+  return <EventForm kind={sheet as "request" | "taken"} close={close} household={household} members={members} userId={userId} completed={completed}/>;
 }
 
 function GroupExpenseForm({ close, household, members, userId, currency, completed }: { close: () => void; household: Household; members: HouseholdMember[]; userId: string; currency: Currency; completed: () => Promise<void> }) {
@@ -526,39 +523,31 @@ function HouseholdMenu({ household, members, userId, close, completed }: { house
   </SheetFrame>;
 }
 
-function EventForm({ kind, close, household, members, debts, userId, completed }: { kind: "request" | "taken" | "purchased"; close: () => void; household: Household; members: HouseholdMember[]; debts: ReplacementDebt[]; userId: string; completed: () => Promise<void> }) {
+function EventForm({ kind, close, household, members, userId, completed }: { kind: "request" | "taken"; close: () => void; household: Household; members: HouseholdMember[]; userId: string; completed: () => Promise<void> }) {
   const [product, setProduct] = useState("");
   const others = members.filter((member) => member.user_id !== userId);
   const [target, setTarget] = useState(others[0]?.user_id || "");
-  const [purchaseTarget, setPurchaseTarget] = useState<"all" | "member" | "self">("all");
   const [needsReplacement, setNeedsReplacement] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const [suggestion, setSuggestion] = useState<ReplacementDebt | null>(null);
-  const title = kind === "request" ? "¿Qué necesitas?" : kind === "taken" ? "Tomé algo" : "Compré algo";
+  const title = kind === "request" ? "¿Qué necesitas?" : "Tomé algo";
   const submit = async () => {
     if (!product.trim() || saving || (kind === "taken" && !target)) return;
     setSaving(true); setError("");
     try {
-      const payload = kind === "request" ? { productName: product } : kind === "taken" ? { productName: product, ownerUserId: target, needsReplacement } : { productName: product, target: purchaseTarget, targetUserId: purchaseTarget === "member" ? target : undefined };
-      const id = await createEvent(household.id, kind === "request" ? "product_request" : kind === "taken" ? "product_taken" : "product_purchased", payload);
+      const payload = kind === "request" ? { productName: product } : { productName: product, ownerUserId: target, needsReplacement };
+      const id = await createEvent(household.id, kind === "request" ? "product_request" : "product_taken", payload);
       await notifyRoomieEvent(id);
-      if (kind === "purchased" && purchaseTarget === "member") {
-        const match = debts.find((debt) => debt.debtor_user_id === userId && debt.owner_user_id === target && debt.status === "pending" && debt.product_name.trim().toLocaleLowerCase("es") === product.trim().toLocaleLowerCase("es"));
-        if (match) { setSuggestion(match); setSaving(false); return; }
-      }
       await completed();
     } catch { setError("No pudimos enviar la acción. Revisa tu conexión."); setSaving(false); }
   };
-  if (suggestion) return <SheetFrame close={close} title="¿Marcar como repuesta?"><p className="text-sm text-[#587067]">Tienes una reposición pendiente de {suggestion.product_name}. El propietario todavía deberá confirmarla.</p><div className="mt-5 grid grid-cols-2 gap-2"><button type="button" onClick={() => void (async () => { const id = await updateDebt(suggestion.id, "report"); await notifyRoomieEvent(id); await completed(); })()} className="min-h-12 rounded-xl bg-[#176b46] font-bold text-white">Sí</button><button type="button" onClick={() => void completed()} className="theme-card min-h-12 rounded-xl border border-black/10 bg-white font-bold">No</button></div></SheetFrame>;
   return <SheetFrame close={close} title={title}>
     {kind === "taken" && <><label className="block text-sm font-bold">¿De quién?</label><select value={target} onChange={(event) => setTarget(event.target.value)} className="theme-card mt-2 min-h-14 w-full rounded-2xl border border-black/10 bg-white px-4 text-base">{others.map((member) => <option key={member.user_id} value={member.user_id}>{member.display_name}</option>)}</select></>}
-    <label className={`${kind === "taken" ? "mt-4" : ""} block text-sm font-bold`}>{kind === "request" ? "Producto" : kind === "taken" ? "¿Qué tomaste?" : "¿Qué compraste?"}</label>
+    <label className={`${kind === "taken" ? "mt-4" : ""} block text-sm font-bold`}>{kind === "request" ? "Producto" : "¿Qué tomaste?"}</label>
     <input autoFocus={kind !== "taken"} value={product} onChange={(event) => setProduct(event.target.value)} maxLength={100} placeholder="Leche" className="theme-card mt-2 min-h-14 w-full rounded-2xl border border-black/10 bg-white px-4 text-base outline-none focus:border-[#176b46]"/>
     {kind === "taken" && <><p className="mt-4 text-sm font-bold">¿Debes reponerlo?</p><div className="mt-2 grid grid-cols-2 gap-2"><Choice selected={needsReplacement} label="Sí" click={() => setNeedsReplacement(true)}/><Choice selected={!needsReplacement} label="No" click={() => setNeedsReplacement(false)}/></div></>}
-    {kind === "purchased" && <><p className="mt-4 text-sm font-bold">¿Para quién?</p><div className="mt-2 grid grid-cols-3 gap-2"><Choice selected={purchaseTarget === "all"} label="Todos" click={() => setPurchaseTarget("all")}/><Choice selected={purchaseTarget === "member"} label="Roomie" click={() => setPurchaseTarget("member")}/><Choice selected={purchaseTarget === "self"} label="Para mí" click={() => setPurchaseTarget("self")}/></div>{purchaseTarget === "member" && <select value={target} onChange={(event) => setTarget(event.target.value)} className="theme-card mt-3 min-h-14 w-full rounded-2xl border border-black/10 bg-white px-4">{others.map((member) => <option key={member.user_id} value={member.user_id}>{member.display_name}</option>)}</select>}</>}
     {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
-    <button type="button" disabled={!product.trim() || saving || ((kind === "taken" || (kind === "purchased" && purchaseTarget === "member")) && !target)} onClick={() => void submit()} className="mt-5 flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-[#176b46] font-bold text-white disabled:opacity-50">{saving && <LoaderCircle size={18} className="animate-spin"/>}{kind === "request" ? "Preguntar" : "Avisar"}</button>
+    <button type="button" disabled={!product.trim() || saving || (kind === "taken" && !target)} onClick={() => void submit()} className="mt-5 flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-[#176b46] font-bold text-white disabled:opacity-50">{saving && <LoaderCircle size={18} className="animate-spin"/>}{kind === "request" ? "Preguntar" : "Avisar"}</button>
   </SheetFrame>;
 }
 
