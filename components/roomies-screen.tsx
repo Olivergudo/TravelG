@@ -39,7 +39,6 @@ import { formatCurrency, type Currency } from "@/lib/currency";
 
 type RoomiesData = Awaited<ReturnType<typeof loadRoomies>>;
 type Sheet = "create" | "join" | "household" | "actions" | "request" | "taken" | "groupExpense" | null;
-const groupExpenseCategories = ["food", "transport", "home", "supermarket", "services", "other"] as const;
 
 export function RoomiesScreen({
   userId,
@@ -462,10 +461,6 @@ function GroupExpenseForm({ close, household, members, userId, currency, complet
   const [concept, setConcept] = useState("");
   const [selected, setSelected] = useState<string[]>(others.map((member) => member.user_id));
   const [scope, setScope] = useState<"group" | "personal">("group");
-  const [mode, setMode] = useState<"equal" | "custom">("equal");
-  const [custom, setCustom] = useState<Record<string, string>>({});
-  const [category, setCategory] = useState("");
-  const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const total = Number(amount);
@@ -473,11 +468,11 @@ function GroupExpenseForm({ close, household, members, userId, currency, complet
   const submit = async () => {
     if (!concept.trim() || !Number.isFinite(total) || total <= 0 || selected.length === 0 || saving) return;
     let shares: Array<{ userId: string; amount: number }>;
-    try { shares = buildExpenseShares(total, selected, mode === "custom" ? Object.fromEntries(selected.map((id) => [id, Number(custom[id] || 0)])) : undefined); }
+    try { shares = buildExpenseShares(total, selected); }
     catch { setError(t("roomies.groupExpense.splitError")); return; }
     setSaving(true); setError("");
     try {
-      const messageId = await createGroupExpense({ householdId: household.id, concept, totalAmount: total, currency, scope, category, notes, shares });
+      const messageId = await createGroupExpense({ householdId: household.id, concept, totalAmount: total, currency, scope, shares });
       await notifyRoomieEvent(messageId);
       await completed();
     } catch { setError(t("roomies.groupExpense.createError")); setSaving(false); }
@@ -487,10 +482,6 @@ function GroupExpenseForm({ close, household, members, userId, currency, complet
     <label className="mt-4 block text-sm font-bold">{t("roomies.groupExpense.concept")}</label><input value={concept} onChange={(event) => setConcept(event.target.value)} maxLength={100} className="theme-card mt-2 min-h-14 w-full rounded-2xl border border-black/10 bg-white px-4 outline-none focus:border-[#176b46]"/>
     <p className="mt-4 text-sm font-bold">{t("roomies.groupExpense.kind")}</p><div className="mt-2 grid grid-cols-2 gap-2"><Choice selected={scope === "group"} label={t("roomies.groupExpense.groupKind")} click={() => { setScope("group"); setSelected(others.map((member) => member.user_id)); }}/><Choice selected={scope === "personal"} label={t("roomies.groupExpense.personalKind")} click={() => { setScope("personal"); setSelected(others[0] ? [others[0].user_id] : []); }}/></div>
     <p className="mt-4 text-sm font-bold">{t("roomies.groupExpense.chargeTo")}</p><div className="mt-2 flex flex-wrap gap-2">{others.map((member) => <button key={member.user_id} type="button" onClick={() => toggle(member.user_id)} className={`min-h-10 rounded-full border px-3 text-sm font-bold ${selected.includes(member.user_id) ? "border-[#176b46] bg-[#e3f2e9] text-[#176b46]" : "theme-card border-black/10 bg-white"}`}>{selected.includes(member.user_id) && <Check className="mr-1 inline" size={14}/>} {member.display_name}</button>)}</div>
-    <p className="mt-4 text-sm font-bold">{t("roomies.groupExpense.split")}</p><div className="mt-2 grid grid-cols-2 gap-2"><Choice selected={mode === "equal"} label={t("roomies.groupExpense.equal")} click={() => setMode("equal")}/><Choice selected={mode === "custom"} label={t("roomies.groupExpense.custom")} click={() => setMode("custom")}/></div>
-    {mode === "custom" && <div className="mt-3 space-y-2">{selected.map((id) => <label key={id} className="flex items-center gap-3 text-sm"><span className="min-w-0 flex-1 truncate">{members.find((member) => member.user_id === id)?.display_name}</span><input inputMode="decimal" value={custom[id] || ""} onChange={(event) => setCustom((current) => ({ ...current, [id]: event.target.value }))} placeholder="$0" className="theme-card h-11 w-28 rounded-xl border border-black/10 bg-white px-3 text-right outline-none"/></label>)}</div>}
-    <label className="mt-4 block text-sm font-bold">{t("roomies.groupExpense.category")}</label><select value={category} onChange={(event) => setCategory(event.target.value)} className="theme-card mt-2 min-h-12 w-full rounded-xl border border-black/10 bg-white px-3"><option value="">{t("roomies.groupExpense.noCategory")}</option>{groupExpenseCategories.map((value) => <option key={value} value={value}>{t(`roomies.groupExpense.category.${value}`)}</option>)}</select>
-    <label className="mt-4 block text-sm font-bold">{t("roomies.groupExpense.notes")}</label><textarea value={notes} onChange={(event) => setNotes(event.target.value)} maxLength={500} rows={2} className="theme-card mt-2 w-full resize-none rounded-2xl border border-black/10 bg-white p-3 outline-none"/>
     {error && <p role="alert" className="mt-3 text-sm text-red-600">{error}</p>}
     <button type="button" disabled={saving || !concept.trim() || total <= 0 || selected.length === 0} onClick={() => void submit()} className="mt-5 flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-[#176b46] font-bold text-white disabled:opacity-50">{saving && <LoaderCircle className="animate-spin" size={18}/>} {t("roomies.groupExpense.create")}</button>
   </SheetFrame>;
