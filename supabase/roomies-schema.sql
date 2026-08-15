@@ -300,28 +300,24 @@ declare
   uid uuid := auth.uid();
   debt public.replacement_debts%rowtype;
   event_id uuid;
-  event_type text;
 begin
   select * into debt from public.replacement_debts where id = debt_id for update;
   if debt.id is null or not public.is_household_member(debt.household_id) then raise exception 'Access denied'; end if;
   if operation = 'report' then
     if uid <> debt.debtor_user_id or debt.status <> 'pending' then raise exception 'Only debtor can report'; end if;
     update public.replacement_debts set status = 'awaiting_confirmation', replacement_reported_at = now() where id = debt.id;
-    event_type := 'replacement_reported';
   elsif operation = 'confirm' then
     if uid <> debt.owner_user_id or debt.status <> 'awaiting_confirmation' then raise exception 'Only owner can confirm'; end if;
     update public.replacement_debts set status = 'resolved', resolved_at = now(), confirmed_by = uid where id = debt.id;
-    event_type := 'replacement_confirmed';
   elsif operation = 'reject' then
     if uid <> debt.owner_user_id or debt.status <> 'awaiting_confirmation' then raise exception 'Only owner can reject'; end if;
     update public.replacement_debts set status = 'pending', replacement_reported_at = null where id = debt.id;
-    event_type := 'replacement_rejected';
   else
     raise exception 'Invalid operation';
   end if;
-  insert into public.household_messages (household_id, user_id, type, metadata)
-  values (debt.household_id, uid, event_type, jsonb_build_object('debtId', debt.id, 'productName', debt.product_name, 'debtorUserId', debt.debtor_user_id, 'ownerUserId', debt.owner_user_id))
-  returning id into event_id;
+  select id into event_id from public.household_messages
+  where type = 'product_taken' and metadata->>'debtId' = debt.id::text
+  order by created_at limit 1;
   return event_id;
 end;
 $$;

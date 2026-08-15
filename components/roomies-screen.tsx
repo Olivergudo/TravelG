@@ -13,7 +13,6 @@ import {
   PackageCheck,
   Pencil,
   Plus,
-  Search,
   Send,
   LogOut,
   Users,
@@ -301,7 +300,11 @@ function MessageCard({ item, mine, actor, names, debts, groupExpenses, userId, h
             ? t("activities.status.added")
             : t("activities.status.active");
   const activityDetail = item.type === "product_taken"
-    ? t("activities.compact.taken", { actor, owner })
+    ? debt?.status === "resolved"
+      ? t("activities.compact.confirmed")
+      : debt?.status === "awaiting_confirmation"
+        ? t(mine ? "activities.compact.reportedMine" : "activities.compact.reported", { actor })
+        : t("activities.compact.taken", { actor, owner })
     : item.type === "replacement_reported"
       ? t(mine ? "activities.compact.reportedMine" : "activities.compact.reported", { actor })
       : item.type === "replacement_confirmed"
@@ -322,8 +325,7 @@ function MessageCard({ item, mine, actor, names, debts, groupExpenses, userId, h
     if (!debt || sending) return;
     setSending(true); setActionError("");
     try {
-      const messageId = await updateDebt(debt.id, operation);
-      await notifyRoomieEvent(messageId);
+      await updateDebt(debt.id, operation);
       await reload();
     } catch {
       setActionError(t("roomies.debtUpdateError"));
@@ -332,6 +334,7 @@ function MessageCard({ item, mine, actor, names, debts, groupExpenses, userId, h
     }
   };
   const time = new Date(item.created_at).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+  if (item.type === "replacement_reported" || item.type === "replacement_confirmed" || item.type === "replacement_rejected") return null;
   if ((item.type === "group_expense_payment_reported" || item.type === "group_expense_payment_confirmed") && groupExpense) return null;
   if (item.type === "group_expense_created" && groupExpense) return <GroupExpenseCard expense={groupExpense} item={item} names={names} actor={actor} userId={userId} reload={reload}/>;
   if (event && activityStyle) return <article className="theme-card relative w-fit min-w-[min(13rem,78%)] max-w-[88%] overflow-hidden rounded-2xl border bg-white px-3 py-2.5 shadow-sm md:max-w-[68%]" style={{ borderColor: `${activityStyle.accent}44` }}>
@@ -345,7 +348,7 @@ function MessageCard({ item, mine, actor, names, debts, groupExpenses, userId, h
     <p className="mt-1 break-words pl-0.5 text-xs leading-snug text-[#718078]">{activityDetail} <span className="text-[#839087]">· {time}</span></p>
     {item.type === "product_request" && item.user_id !== userId && <button type="button" disabled={sending} onClick={() => void answer()} className="mt-3 min-h-10 rounded-xl bg-[#e3f2e9] px-4 text-sm font-bold text-[#176b46] disabled:opacity-50">{t("roomies.activity.iHaveIt")}</button>}
     {item.type === "product_taken" && debt?.status === "pending" && debt.debtor_user_id === userId && <button type="button" disabled={sending} onClick={() => void updateReplacement("report")} className="mt-3 min-h-10 w-full rounded-xl bg-[#176b46] px-4 text-sm font-bold text-white disabled:opacity-50">{t("roomies.replaced")}</button>}
-    {item.type === "replacement_reported" && debt?.status === "awaiting_confirmation" && debt.owner_user_id === userId && <div className="mt-3 grid grid-cols-2 gap-2"><button type="button" disabled={sending} onClick={() => void updateReplacement("confirm")} className="min-h-10 rounded-xl bg-[#176b46] px-2 text-sm font-bold text-white disabled:opacity-50">{t("roomies.replacedByOther")}</button><button type="button" disabled={sending} onClick={() => void updateReplacement("reject")} className="theme-card min-h-10 rounded-xl border border-black/10 bg-white px-2 text-sm font-bold disabled:opacity-50">{t("roomies.notYet")}</button></div>}
+    {item.type === "product_taken" && debt?.status === "awaiting_confirmation" && debt.owner_user_id === userId && <div className="mt-3 grid grid-cols-2 gap-2"><button type="button" disabled={sending} onClick={() => void updateReplacement("confirm")} className="min-h-10 rounded-xl bg-[#176b46] px-2 text-sm font-bold text-white disabled:opacity-50">{t("roomies.replacedByOther")}</button><button type="button" disabled={sending} onClick={() => void updateReplacement("reject")} className="theme-card min-h-10 rounded-xl border border-black/10 bg-white px-2 text-sm font-bold disabled:opacity-50">{t("roomies.notYet")}</button></div>}
     {actionError && <p role="alert" className="mt-2 text-xs font-semibold text-red-600">{actionError}</p>}
   </article>;
   return <><div className={`flex ${mine ? "justify-end" : "justify-start"}`}>
@@ -501,7 +504,7 @@ function DebtsView({ userId, data, reload }: { userId: string; data: RoomiesData
   );
   const act = async (debt: ReplacementDebt, operation: "report" | "confirm" | "reject") => {
     setBusy(debt.id + operation); setError("");
-    try { const messageId = await updateDebt(debt.id, operation); await notifyRoomieEvent(messageId); await reload(); }
+    try { await updateDebt(debt.id, operation); await reload(); }
     catch { setError("No pudimos actualizar la reposición. Revisa tu conexión."); }
     finally { setBusy(""); }
   };
@@ -528,7 +531,6 @@ function RoomieSheet({ sheet, close, next, household, members, userId, currency,
   const { t } = useI18n();
   if (sheet === "household") return <HouseholdMenu household={household} members={members} userId={userId} close={close} completed={completed}/>;
   if (sheet === "actions") return <SheetFrame title={t("roomies.actions")} close={close} aboveComposer>
-    <Action icon={<Search/>} label={t("roomies.ask")} click={() => next("request")}/>
     <Action icon={<PackageCheck/>} label={t("roomies.taken")} click={() => next("taken")}/>
     <Action icon={<CircleDollarSign/>} label={t("roomies.groupExpense.action")} click={() => next("groupExpense")}/>
   </SheetFrame>;

@@ -6,7 +6,6 @@ import { formatCurrency } from "@/lib/currency";
 import { useI18n } from "@/lib/i18n";
 import { markReplacementPurchased, updateDebt, updateGroupExpensePayment } from "@/lib/roomies/repository";
 import { paymentObligations } from "@/lib/roomies/obligations";
-import { notifyRoomieEvent } from "@/lib/roomies/push-client";
 import type { RoomieObligations } from "@/lib/roomies/types";
 
 type SharedProps = { data: RoomieObligations; userId: string; reload: () => Promise<void>; openRoomies: () => void };
@@ -21,7 +20,7 @@ export function ReplacementShoppingSection({ data, userId, reload, openRoomies }
     setBusy(id);
     try {
       if (action === "purchase") await markReplacementPurchased(id);
-      else await notifyRoomieEvent(await updateDebt(id, "report"));
+      else await updateDebt(id, "report");
       await reload();
     } catch { window.alert(t("shopping.replacements.updateError")); } finally { setBusy(undefined); }
   };
@@ -39,7 +38,7 @@ export function FinancialObligationsSection({ data, userId, reload, openRoomies 
   if (!toPay.length && !toReceive.length) return null;
   const act = async (expenseId: string, participantId: string, operation: "report" | "confirm" | "reject") => {
     const key = `${expenseId}:${participantId}:${operation}`; setBusy(key);
-    try { await notifyRoomieEvent(await updateGroupExpensePayment(expenseId, participantId, operation)); await reload(); }
+    try { await updateGroupExpensePayment(expenseId, participantId, operation); await reload(); }
     catch { window.alert(t("finance.pending.updateError")); } finally { setBusy(undefined); }
   };
   const group = (title: string, rows: typeof toPay, receive: boolean) => <details open={rows.length <= 3} className="theme-card rounded-2xl border border-black/[.06] bg-white"><summary className="flex min-h-12 cursor-pointer list-none items-center gap-2 px-4 font-bold"><span className="flex-1">{title}</span><span className="rounded-full bg-[#edf2ee] px-2 py-1 text-xs text-[#587067]">{rows.length}</span></summary><div className="border-t border-black/[.06]">{rows.map(({ expense, share }) => { const payer = names.get(expense.payer_id) || "Roomie"; const participant = names.get(share.user_id) || "Roomie"; return <div key={`${expense.id}:${share.id}:${receive}`} className="border-b border-black/[.06] p-4 last:border-0"><div className="flex items-start gap-3"><CircleDollarSign className="mt-0.5 shrink-0 text-[#176b46]" size={20}/><div className="min-w-0 flex-1"><b className="block truncate text-sm">{expense.concept}</b><p className="mt-1 text-xs text-[#718078]">{receive ? t("finance.pending.owesYou", { name: participant }) : t("finance.pending.youOwe", { name: payer })}</p></div><b className="shrink-0 text-sm">{formatCurrency(share.amount, expense.currency)}</b></div><div className="mt-3 flex flex-wrap gap-2">{!receive && share.status === "pending" && <button disabled={Boolean(busy)} onClick={() => void act(expense.id, userId, "report")} className="min-h-10 flex-1 rounded-xl bg-[#176b46] px-3 text-xs font-bold text-white">{t("finance.pending.reportPaid")}</button>}{!receive && share.status === "reported_paid" && <span className="text-xs font-semibold text-[#718078]">{t("finance.pending.awaitingConfirmation")}</span>}{receive && share.status === "reported_paid" && <><button disabled={Boolean(busy)} onClick={() => void act(expense.id, share.user_id, "confirm")} className="min-h-10 flex-1 rounded-xl bg-[#176b46] px-3 text-xs font-bold text-white">{t("finance.pending.confirmPayment")}</button><button disabled={Boolean(busy)} onClick={() => void act(expense.id, share.user_id, "reject")} className="min-h-10 rounded-xl border border-black/10 px-3 text-xs font-bold">{t("finance.pending.notYet")}</button></>}</div></div>; })}</div></details>;
