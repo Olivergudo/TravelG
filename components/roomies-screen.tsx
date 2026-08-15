@@ -199,12 +199,14 @@ function ChatView({ userId, data, openActions, openPending, reload }: { userId: 
   };
   return <div className="flex min-h-0 flex-1 flex-col px-4 pb-[calc(5rem+env(safe-area-inset-bottom)+8px)]">
     <PendingAlert userId={userId} data={data} open={openPending}/>
-    <div className="mt-4 flex min-h-0 flex-1 flex-col justify-end gap-2.5 overflow-y-auto overscroll-contain [&>*]:shrink-0">
-      {data.messages.length === 0 && (
-        <Empty icon={<MessageCircle/>} title={t("roomies.chat")} text={t("roomies.tagline")}/>
-      )}
-      {data.messages.map((item) => <MessageCard key={item.id} item={item} mine={item.user_id === userId} actor={names.get(item.user_id) || "Roomie"} names={names} debts={data.debts} groupExpenses={data.groupExpenses} userId={userId} householdId={data.household!.id} reload={reload}/>) }
-      <div ref={endRef}/>
+    <div className="mt-4 min-h-0 flex-1 overflow-y-auto overscroll-contain">
+      <div className="flex min-h-full flex-col justify-end gap-2.5 [&>*]:shrink-0">
+        {data.messages.length === 0 && (
+          <Empty icon={<MessageCircle/>} title={t("roomies.chat")} text={t("roomies.tagline")}/>
+        )}
+        {data.messages.map((item) => <MessageCard key={item.id} item={item} mine={item.user_id === userId} actor={names.get(item.user_id) || "Roomie"} names={names} debts={data.debts} groupExpenses={data.groupExpenses} userId={userId} householdId={data.household!.id} reload={reload}/>) }
+        <div ref={endRef}/>
+      </div>
     </div>
     {error && <p role="alert" className="mt-3 text-sm text-red-600">{error}</p>}
     <div className="theme-card mt-2.5 flex shrink-0 items-center gap-2 rounded-2xl border border-black/[.07] bg-white p-2 shadow-[0_8px_24px_rgba(0,0,0,.09)]">
