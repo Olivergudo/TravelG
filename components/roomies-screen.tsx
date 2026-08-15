@@ -95,7 +95,7 @@ export function RoomiesScreen({
   if (!ready) return <ScreenLoader />;
   if (!data.household) return <RoomiesWelcome error={error} open={setSheet} reload={reload} sheet={sheet} />;
   return (
-    <section className="flex h-dvh min-h-0 flex-col overflow-hidden pb-[calc(5rem+env(safe-area-inset-bottom))]">
+    <section className="flex h-dvh min-h-0 flex-col overflow-hidden">
       <RoomiesHeader household={data.household} members={data.members} openMenu={() => setSheet("household")} />
       <div className="mx-4 grid grid-cols-2 rounded-2xl bg-black/[.045] p-1 dark:bg-white/[.045]">
         <button type="button" onClick={() => setView("chat")} className={`min-h-11 rounded-xl text-sm font-bold ${view === "chat" ? "theme-card bg-white text-[#176b46] shadow-sm" : "text-[#718078]"}`}>{t("roomies.chat")}</button>
@@ -106,7 +106,7 @@ export function RoomiesScreen({
       {view === "chat" ? (
         <ChatView userId={userId} data={data} openActions={() => setSheet("actions")} openPending={() => setView("pending")} reload={reload} />
       ) : (
-        <div className="min-h-0 flex-1 overflow-y-auto"><DebtsView userId={userId} data={data} reload={reload} /></div>
+        <div className="min-h-0 flex-1 overflow-y-auto pb-[calc(5rem+env(safe-area-inset-bottom))]"><DebtsView userId={userId} data={data} reload={reload} /></div>
       )}
       {sheet && (
         <RoomieSheet
@@ -197,9 +197,9 @@ function ChatView({ userId, data, openActions, openPending, reload }: { userId: 
     catch { setError("No pudimos enviar el mensaje. Revisa tu conexión."); }
     finally { setSending(false); }
   };
-  return <div className="flex min-h-0 flex-1 flex-col px-4 pb-2">
+  return <div className="flex min-h-0 flex-1 flex-col px-4 pb-[calc(5rem+env(safe-area-inset-bottom)+8px)]">
     <PendingAlert userId={userId} data={data} open={openPending}/>
-    <div className="mt-4 flex min-h-0 flex-1 flex-col justify-end gap-2.5 overflow-y-auto overscroll-contain">
+    <div className="mt-4 flex min-h-0 flex-1 flex-col justify-end gap-2.5 overflow-y-auto overscroll-contain [&>*]:shrink-0">
       {data.messages.length === 0 && (
         <Empty icon={<MessageCircle/>} title={t("roomies.chat")} text={t("roomies.tagline")}/>
       )}
