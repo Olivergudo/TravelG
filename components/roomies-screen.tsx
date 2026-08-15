@@ -11,6 +11,7 @@ import {
   LoaderCircle,
   MessageCircle,
   PackageCheck,
+  Pencil,
   Plus,
   Search,
   Send,
@@ -23,6 +24,8 @@ import {
   createEvent,
   createGroupExpense,
   createHousehold,
+  editGroupExpense,
+  editRoomieMessage,
   joinHousehold,
   leaveHousehold,
   loadRoomies,
@@ -93,7 +96,7 @@ export function RoomiesScreen({
   if (!ready) return <ScreenLoader />;
   if (!data.household) return <RoomiesWelcome error={error} open={setSheet} reload={reload} sheet={sheet} />;
   return (
-    <section className="fixed inset-x-0 bottom-[calc(5rem+env(safe-area-inset-bottom))] top-0 mx-auto flex min-h-0 w-full max-w-2xl flex-col overflow-hidden">
+    <section className="fixed inset-x-0 bottom-[calc(5rem+env(safe-area-inset-bottom))] top-0 z-40 mx-auto flex min-h-0 w-full max-w-2xl flex-col">
       <RoomiesHeader household={data.household} members={data.members} openMenu={() => setSheet("household")} />
       <div className="mx-4 grid grid-cols-2 rounded-2xl bg-black/[.045] p-1 dark:bg-white/[.045]">
         <button type="button" onClick={() => setView("chat")} className={`min-h-12 rounded-xl text-sm font-bold sm:min-h-11 ${view === "chat" ? "theme-card bg-white text-[#176b46] shadow-sm" : "text-[#718078]"}`}>{t("roomies.chat")}</button>
@@ -260,6 +263,9 @@ function MessageCard({ item, mine, actor, names, debts, groupExpenses, userId, h
   const event = item.type !== "message";
   const [sending, setSending] = useState(false);
   const [actionError, setActionError] = useState("");
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const longPress = useLongPress(() => { if (mine && item.type === "message") setMenuOpen(true); });
   const debt = debts.find((candidate) => candidate.id === String(metadata.debtId || ""));
   const groupExpense = groupExpenses.find((candidate) => candidate.id === String(metadata.expenseId || ""));
   let text = item.message || "";
@@ -330,7 +336,8 @@ function MessageCard({ item, mine, actor, names, debts, groupExpenses, userId, h
     }
   };
   const time = new Date(item.created_at).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
-  if (item.type.startsWith("group_expense_") && groupExpense) return <GroupExpenseCard expense={groupExpense} item={item} names={names} actor={actor} userId={userId} reload={reload}/>;
+  if ((item.type === "group_expense_payment_reported" || item.type === "group_expense_payment_confirmed") && groupExpense) return null;
+  if (item.type === "group_expense_created" && groupExpense) return <GroupExpenseCard expense={groupExpense} item={item} names={names} actor={actor} userId={userId} reload={reload}/>;
   if (event && activityStyle) return <article className="theme-card relative w-fit min-w-[min(13rem,78%)] max-w-[88%] overflow-hidden rounded-2xl border bg-white px-3 py-2.5 shadow-sm md:max-w-[68%]" style={{ borderColor: `${activityStyle.accent}44` }}>
     <span className="absolute inset-y-0 left-0 w-0.5" style={{ backgroundColor: activityStyle.accent }}/>
     <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 pl-0.5 text-sm leading-snug">
@@ -345,21 +352,67 @@ function MessageCard({ item, mine, actor, names, debts, groupExpenses, userId, h
     {item.type === "replacement_reported" && debt?.status === "awaiting_confirmation" && debt.owner_user_id === userId && <div className="mt-3 grid grid-cols-2 gap-2"><button type="button" disabled={sending} onClick={() => void updateReplacement("confirm")} className="min-h-10 rounded-xl bg-[#176b46] px-2 text-sm font-bold text-white disabled:opacity-50">{t("roomies.replacedByOther")}</button><button type="button" disabled={sending} onClick={() => void updateReplacement("reject")} className="theme-card min-h-10 rounded-xl border border-black/10 bg-white px-2 text-sm font-bold disabled:opacity-50">{t("roomies.notYet")}</button></div>}
     {actionError && <p role="alert" className="mt-2 text-xs font-semibold text-red-600">{actionError}</p>}
   </article>;
-  return <div className={`flex ${mine ? "justify-end" : "justify-start"}`}>
-    <article className={`${mine ? "bg-[#176b46] text-white" : "theme-card bg-white"} w-fit min-w-[min(140px,70vw)] max-w-[82%] rounded-2xl px-4 py-3 shadow-sm md:max-w-[65%]`}>
+  return <><div className={`flex ${mine ? "justify-end" : "justify-start"}`}>
+    <article {...(mine ? longPress : {})} className={`${mine ? "bg-[#176b46] text-white" : "theme-card bg-white"} w-fit min-w-[min(140px,70vw)] max-w-[82%] rounded-2xl px-4 py-3 shadow-sm md:max-w-[65%]`}>
       <p className={`break-words text-xs font-bold ${mine ? "text-white/70" : "text-[#176b46]"}`}>{actor}</p>
       <p data-i18n-ignore className="mt-1 whitespace-pre-wrap break-words text-sm leading-relaxed">{text}</p>
       <time className={`ml-auto mt-1 block w-fit text-[11px] ${mine ? "text-white/55" : "text-[#839087]"}`}>{time}</time>
     </article>
-  </div>;
+  </div>
+  {menuOpen && (
+    <EditMenu close={() => setMenuOpen(false)} edit={() => { setMenuOpen(false); setEditing(true); }}/>
+  )}
+  {editing && (
+    <MessageEditSheet item={item} close={() => setEditing(false)} completed={reload}/>
+  )}
+  </>;
 }
 
 const formatGroupAmount = (amount: number, currency: Currency) => formatCurrency(amount, currency);
+
+function useLongPress(action: () => void) {
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const start = useRef({ x: 0, y: 0 });
+  const fired = useRef(false);
+  const clear = () => { if (timer.current) clearTimeout(timer.current); timer.current = null; };
+  return {
+    onPointerDown: (event: React.PointerEvent) => { start.current = { x: event.clientX, y: event.clientY }; fired.current = false; clear(); timer.current = setTimeout(() => { fired.current = true; action(); }, 550); },
+    onPointerMove: (event: React.PointerEvent) => { if (Math.abs(event.clientX - start.current.x) > 8 || Math.abs(event.clientY - start.current.y) > 8) clear(); },
+    onPointerUp: clear,
+    onPointerCancel: clear,
+    onPointerLeave: clear,
+    onContextMenu: (event: React.MouseEvent) => { event.preventDefault(); clear(); action(); },
+    onClickCapture: (event: React.MouseEvent) => { if (fired.current) { event.preventDefault(); event.stopPropagation(); fired.current = false; } },
+  };
+}
+
+function EditMenu({ close, edit }: { close: () => void; edit: () => void }) {
+  const { t } = useI18n();
+  return <div className="fixed inset-0 z-[110] flex items-end justify-center bg-black/40" onPointerDown={(event) => { if (event.target === event.currentTarget) close(); }}><div className="theme-card mb-[calc(5rem+env(safe-area-inset-bottom)+10px)] w-[calc(100%-2rem)] max-w-md rounded-[24px] bg-white p-2 shadow-2xl"><button type="button" onClick={edit} className="flex min-h-14 w-full items-center gap-3 rounded-2xl px-4 text-left font-bold text-[#176b46]"><Pencil size={19}/>{t("common.edit")}</button><button type="button" onClick={close} className="min-h-12 w-full rounded-2xl px-4 text-sm font-bold text-[#718078]">{t("common.cancel")}</button></div></div>;
+}
+
+function MessageEditSheet({ item, close, completed }: { item: RoomieMessage; close: () => void; completed: () => Promise<void> }) {
+  const { t } = useI18n();
+  const [value, setValue] = useState(item.message || "");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const save = async () => {
+    if (!value.trim() || saving) return;
+    setSaving(true); setError("");
+    try { await editRoomieMessage(item.id, value); close(); await completed(); }
+    catch { setError(t("roomies.editError")); setSaving(false); }
+  };
+  return <SheetFrame title={t("roomies.editMessage")} close={close}><textarea autoFocus value={value} onChange={(event) => setValue(event.target.value)} maxLength={1000} className="theme-card min-h-28 w-full resize-none rounded-2xl border border-black/10 bg-white p-4 outline-none focus:border-[#176b46]"/>{error && <p role="alert" className="mt-3 text-sm text-red-600">{error}</p>}<button type="button" disabled={!value.trim() || saving} onClick={() => void save()} className="mt-4 flex min-h-14 w-full items-center justify-center rounded-2xl bg-[#176b46] px-4 font-bold text-white disabled:opacity-50">{saving ? t("common.saving") : t("common.save")}</button></SheetFrame>;
+}
 
 function GroupExpenseCard({ expense, item, names, actor, userId, reload }: { expense: GroupExpense; item: RoomieMessage; names: Map<string, string>; actor: string; userId: string; reload: () => Promise<void> }) {
   const { t, count } = useI18n();
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const canEdit = item.type === "group_expense_created" && expense.creator_id === userId && expense.group_expense_shares.every((share) => share.status === "pending");
+  const longPress = useLongPress(() => { if (canEdit) setMenuOpen(true); });
   const payer = names.get(expense.payer_id) || t("roomies.member");
   const myShare = expense.group_expense_shares.find((share) => share.user_id === userId);
   const singleShare = expense.group_expense_shares.length === 1 ? expense.group_expense_shares[0] : undefined;
@@ -374,7 +427,7 @@ function GroupExpenseCard({ expense, item, names, actor, userId, reload }: { exp
   const time = new Date(item.created_at).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
   const update = async (participantId: string, operation: "report" | "confirm" | "reject") => {
     setBusy(participantId + operation); setError("");
-    try { const messageId = await updateGroupExpensePayment(expense.id, participantId, operation); await notifyRoomieEvent(messageId); await reload(); }
+    try { await updateGroupExpensePayment(expense.id, participantId, operation); await reload(); }
     catch { setError(t("roomies.groupExpense.updateError")); }
     finally { setBusy(""); }
   };
@@ -385,7 +438,7 @@ function GroupExpenseCard({ expense, item, names, actor, userId, reload }: { exp
     return <article className="theme-card w-fit max-w-[88%] rounded-2xl border border-[#A1DBEE]/30 bg-white px-3 py-2.5 shadow-sm md:max-w-[68%]"><p className="text-sm font-bold">{item.type === "group_expense_payment_confirmed" ? "✅" : rejected ? "↩️" : "⏳"} {expense.concept}</p><p className="mt-1 text-xs text-[#718078]">{t(item.type === "group_expense_payment_confirmed" ? "roomies.groupExpense.paymentConfirmedEvent" : rejected ? "roomies.groupExpense.paymentRejectedEvent" : "roomies.groupExpense.paymentReportedEvent", { participant })} · {time}</p></article>;
   }
   const statusKey = expense.status === "paid" ? "paid" : expense.status === "partially_paid" ? "partiallyPaid" : expense.status === "cancelled" ? "cancelled" : "pending";
-  return <details className="theme-card group w-full max-w-[94%] overflow-hidden rounded-[24px] border border-[#A1DBEE]/30 bg-white shadow-sm md:max-w-[78%]">
+  return <><details {...(canEdit ? longPress : {})} className="theme-card group w-full max-w-[94%] overflow-hidden rounded-[24px] border border-[#A1DBEE]/30 bg-white shadow-sm md:max-w-[78%]">
     <summary className="cursor-pointer list-none p-4 [&::-webkit-details-marker]:hidden">
       <div className="flex items-center justify-between gap-3"><span className="rounded-full bg-[#A1DBEE]/15 px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wide text-[#5aa8c4]">{personalLabel}</span><span className="text-[11px] text-[#839087]">{time}</span></div>
       <strong className="mt-3 block text-3xl tracking-[-.04em]">{formatGroupAmount(Number(expense.scope === "personal" ? singleShare?.amount ?? expense.total_amount : expense.total_amount), expense.currency)}</strong>
@@ -399,7 +452,40 @@ function GroupExpenseCard({ expense, item, names, actor, userId, reload }: { exp
       {expense.payer_id === userId && reported.map((share) => <div key={share.id} className="mt-4"><p className="mb-2 text-xs font-bold">{t("roomies.groupExpense.confirmHint", { participant: names.get(share.user_id) || t("roomies.member") })}</p><div className="grid grid-cols-2 gap-2"><button type="button" disabled={Boolean(busy)} onClick={() => void update(share.user_id, "confirm")} className="min-h-10 rounded-xl bg-[#176b46] px-2 text-sm font-bold text-white">{t("roomies.groupExpense.confirm")}</button><button type="button" disabled={Boolean(busy)} onClick={() => void update(share.user_id, "reject")} className="theme-card min-h-10 rounded-xl border border-black/10 bg-white px-2 text-sm font-bold">{t("roomies.notYet")}</button></div></div>)}
       {error && <p role="alert" className="mt-3 text-xs font-semibold text-red-600">{error}</p>}
     </div>
-  </details>;
+  </details>
+  {menuOpen && (
+    <EditMenu close={() => setMenuOpen(false)} edit={() => { setMenuOpen(false); setEditing(true); }}/>
+  )}
+  {editing && (
+    <GroupExpenseEditSheet expense={expense} names={names} userId={userId} close={() => setEditing(false)} completed={reload}/>
+  )}
+  </>;
+}
+
+function GroupExpenseEditSheet({ expense, names, userId, close, completed }: { expense: GroupExpense; names: Map<string, string>; userId: string; close: () => void; completed: () => Promise<void> }) {
+  const { t } = useI18n();
+  const participants = [...names.entries()].filter(([id]) => id !== userId);
+  const [amount, setAmount] = useState(String(expense.total_amount));
+  const [concept, setConcept] = useState(expense.concept);
+  const [scope, setScope] = useState<"group" | "personal">(expense.scope);
+  const [selected, setSelected] = useState(expense.group_expense_shares.map((share) => share.user_id));
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const total = Number(amount);
+  const toggle = (id: string) => setSelected((current) => scope === "personal" ? [id] : current.includes(id) ? current.filter((value) => value !== id) : [...current, id]);
+  const save = async () => {
+    if (!concept.trim() || total <= 0 || selected.length === 0 || saving) return;
+    setSaving(true); setError("");
+    try { await editGroupExpense({ expenseId: expense.id, concept, totalAmount: total, scope, shares: buildExpenseShares(total, selected) }); close(); await completed(); }
+    catch { setError(t("roomies.editError")); setSaving(false); }
+  };
+  return <SheetFrame title={t("roomies.editAccount")} close={close}>
+    <label className="block text-sm font-bold">{t("roomies.groupExpense.amount")}</label><input autoFocus inputMode="decimal" value={amount} onChange={(event) => setAmount(event.target.value)} className="theme-card mt-2 min-h-14 w-full rounded-2xl border border-black/10 bg-white px-4 text-xl font-bold outline-none focus:border-[#176b46]"/>
+    <label className="mt-4 block text-sm font-bold">{t("roomies.groupExpense.concept")}</label><input value={concept} onChange={(event) => setConcept(event.target.value)} maxLength={100} className="theme-card mt-2 min-h-14 w-full rounded-2xl border border-black/10 bg-white px-4 outline-none focus:border-[#176b46]"/>
+    <p className="mt-4 text-sm font-bold">{t("roomies.groupExpense.kind")}</p><div className="mt-2 grid grid-cols-2 gap-2"><Choice selected={scope === "group"} label={t("roomies.groupExpense.groupKind")} click={() => { setScope("group"); setSelected(participants.map(([id]) => id)); }}/><Choice selected={scope === "personal"} label={t("roomies.groupExpense.personalKind")} click={() => { setScope("personal"); setSelected(participants[0] ? [participants[0][0]] : []); }}/></div>
+    <p className="mt-4 text-sm font-bold">{t("roomies.groupExpense.chargeTo")}</p><div className="mt-2 flex flex-wrap gap-2">{participants.map(([id, name]) => <button key={id} type="button" onClick={() => toggle(id)} className={`min-h-10 rounded-full border px-3 text-sm font-bold ${selected.includes(id) ? "border-[#176b46] bg-[#e3f2e9] text-[#176b46]" : "theme-card border-black/10 bg-white"}`}>{selected.includes(id) && <Check className="mr-1 inline" size={14}/>} {name}</button>)}</div>
+    {error && <p role="alert" className="mt-3 text-sm text-red-600">{error}</p>}<button type="button" disabled={saving || !concept.trim() || total <= 0 || selected.length === 0} onClick={() => void save()} className="mt-5 flex min-h-14 w-full items-center justify-center rounded-2xl bg-[#176b46] font-bold text-white disabled:opacity-50">{saving ? t("common.saving") : t("common.save")}</button>
+  </SheetFrame>;
 }
 
 function DebtsView({ userId, data, reload }: { userId: string; data: RoomiesData; reload: () => Promise<void> }) {
@@ -445,7 +531,7 @@ function DebtsView({ userId, data, reload }: { userId: string; data: RoomiesData
 function RoomieSheet({ sheet, close, next, household, members, userId, currency, completed }: { sheet: Sheet; close: () => void; next: (sheet: Sheet) => void; household: Household; members: HouseholdMember[]; userId: string; currency: Currency; completed: () => Promise<void> }) {
   const { t } = useI18n();
   if (sheet === "household") return <HouseholdMenu household={household} members={members} userId={userId} close={close} completed={completed}/>;
-  if (sheet === "actions") return <SheetFrame title={t("roomies.actions")} close={close}>
+  if (sheet === "actions") return <SheetFrame title={t("roomies.actions")} close={close} aboveComposer>
     <Action icon={<Search/>} label={t("roomies.ask")} click={() => next("request")}/>
     <Action icon={<PackageCheck/>} label={t("roomies.taken")} click={() => next("taken")}/>
     <Action icon={<CircleDollarSign/>} label={t("roomies.groupExpense.action")} click={() => next("groupExpense")}/>
@@ -555,9 +641,9 @@ function NotificationPrompt() {
   </aside>;
 }
 
-function SheetFrame({ close, title, children }: { close: () => void; title: string; children: React.ReactNode }) {
+function SheetFrame({ close, title, children, aboveComposer = false }: { close: () => void; title: string; children: React.ReactNode; aboveComposer?: boolean }) {
   useEffect(() => { const previous = document.body.style.overflow; document.body.style.overflow = "hidden"; return () => { document.body.style.overflow = previous; }; }, []);
-  return <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/55" onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }}><section role="dialog" aria-modal="true" className="theme-card max-h-[88dvh] w-full max-w-2xl overflow-y-auto overscroll-contain rounded-t-[30px] bg-white px-5 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-5 shadow-2xl"><div className="mb-5 flex items-center justify-between gap-3"><h2 className="text-2xl font-bold tracking-[-.025em]">{title}</h2><button type="button" onClick={close} aria-label="Cerrar" className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-black/[.045]"><X/></button></div>{children}</section></div>;
+  return <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/55" onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }}><section role="dialog" aria-modal="true" className={`theme-card max-h-[88dvh] overflow-y-auto overscroll-contain bg-white px-5 pt-5 shadow-2xl ${aboveComposer ? "mb-[calc(10rem+env(safe-area-inset-bottom))] w-[calc(100%-2rem)] max-w-[40rem] rounded-[30px] pb-3" : "w-full max-w-2xl rounded-t-[30px] pb-[max(1.5rem,env(safe-area-inset-bottom))]"}`}><div className="mb-5 flex items-center justify-between gap-3"><h2 className="text-2xl font-bold tracking-[-.025em]">{title}</h2><button type="button" onClick={close} aria-label="Cerrar" className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-black/[.045]"><X/></button></div>{children}</section></div>;
 }
 
 function Action({ icon, label, click }: { icon: React.ReactNode; label: string; click: () => void }) { return <button type="button" onClick={click} className="theme-card mb-2 flex min-h-14 w-full items-center gap-3 rounded-2xl border border-black/[.06] bg-white px-4 text-left font-bold"><span className="text-[#176b46]">{icon}</span>{label}</button>; }

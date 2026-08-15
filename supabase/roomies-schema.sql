@@ -393,7 +393,6 @@ declare
   expense public.group_expenses%rowtype;
   share public.group_expense_shares%rowtype;
   event_id uuid;
-  event_type text;
   confirmed_count integer;
   shares_count integer;
 begin
@@ -403,15 +402,12 @@ begin
   if operation = 'report' then
     if uid <> share.user_id or share.status <> 'pending' then raise exception 'Only participant can report'; end if;
     update public.group_expense_shares set status = 'reported_paid', reported_at = now() where id = share.id;
-    event_type := 'group_expense_payment_reported';
   elsif operation = 'confirm' then
     if uid <> expense.payer_id or share.status <> 'reported_paid' then raise exception 'Only payer can confirm'; end if;
     update public.group_expense_shares set status = 'confirmed_paid', confirmed_at = now() where id = share.id;
-    event_type := 'group_expense_payment_confirmed';
   elsif operation = 'reject' then
     if uid <> expense.payer_id or share.status <> 'reported_paid' then raise exception 'Only payer can reject'; end if;
     update public.group_expense_shares set status = 'pending', reported_at = null where id = share.id;
-    event_type := 'group_expense_payment_reported';
   else
     raise exception 'Invalid operation';
   end if;
@@ -423,10 +419,48 @@ begin
     resolved_at = case when confirmed_count = shares_count then now() else null end
   where id = expense.id;
 
-  insert into public.household_messages (household_id, user_id, type, metadata)
-  values (expense.household_id, uid, event_type, jsonb_build_object('expenseId', expense.id, 'concept', expense.concept, 'participantUserId', share.user_id, 'amount', share.amount, 'operation', operation))
-  returning id into event_id;
+  select id into event_id from public.household_messages
+  where type = 'group_expense_created' and metadata->>'expenseId' = expense.id::text
+  order by created_at limit 1;
   return event_id;
+end;
+$$;
+
+create or replace function public.edit_roomie_message(target_message uuid, new_message text)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if auth.uid() is null or char_length(trim(new_message)) not between 1 and 1000 then raise exception 'Invalid message'; end if;
+  update public.household_messages
+  set message = trim(new_message), metadata = metadata || jsonb_build_object('editedAt', now())
+  where id = target_message and user_id = auth.uid() and type = 'message';
+  if not found then raise exception 'Access denied'; end if;
+end;
+$$;
+
+create or replace function public.edit_group_expense(target_expense uuid, expense_concept text, expense_total numeric, expense_scope text, participant_shares jsonb)
+returns void language plpgsql security definer set search_path = public as $$
+declare
+  expense public.group_expenses%rowtype;
+  share jsonb;
+  shares_total numeric := 0;
+begin
+  select * into expense from public.group_expenses where id = target_expense for update;
+  if expense.id is null or expense.creator_id <> auth.uid() then raise exception 'Access denied'; end if;
+  if exists (select 1 from public.group_expense_shares where expense_id = target_expense and status <> 'pending') then raise exception 'Expense already has payment activity'; end if;
+  if char_length(trim(expense_concept)) not between 1 and 100 or expense_total <= 0 or expense_scope not in ('group', 'personal') or jsonb_array_length(participant_shares) = 0 then raise exception 'Invalid expense'; end if;
+  for share in select * from jsonb_array_elements(participant_shares) loop
+    if (share->>'amount')::numeric <= 0 or not exists (select 1 from public.household_members where household_id = expense.household_id and user_id = (share->>'userId')::uuid) then raise exception 'Invalid share'; end if;
+    shares_total := shares_total + (share->>'amount')::numeric;
+  end loop;
+  if shares_total <> expense_total then raise exception 'Invalid split'; end if;
+  update public.group_expenses set concept = trim(expense_concept), total_amount = expense_total, scope = expense_scope where id = target_expense;
+  delete from public.group_expense_shares where expense_id = target_expense;
+  for share in select * from jsonb_array_elements(participant_shares) loop
+    insert into public.group_expense_shares (expense_id, user_id, amount) values (target_expense, (share->>'userId')::uuid, (share->>'amount')::numeric);
+  end loop;
+  update public.household_messages
+  set metadata = metadata || jsonb_build_object('concept', trim(expense_concept), 'totalAmount', expense_total, 'scope', expense_scope, 'editedAt', now())
+  where type = 'group_expense_created' and metadata->>'expenseId' = target_expense::text;
 end;
 $$;
 
@@ -463,6 +497,8 @@ revoke all on function public.update_replacement_debt(uuid, text) from public;
 revoke all on function public.mark_replacement_purchased(uuid) from public;
 revoke all on function public.create_group_expense(uuid, text, numeric, text, text, text, text, jsonb) from public;
 revoke all on function public.update_group_expense_payment(uuid, uuid, text) from public;
+revoke all on function public.edit_roomie_message(uuid, text) from public;
+revoke all on function public.edit_group_expense(uuid, text, numeric, text, jsonb) from public;
 revoke all on function public.leave_household(uuid) from public;
 grant execute on function public.create_household(text) to authenticated;
 grant execute on function public.join_household(text) to authenticated;
@@ -471,6 +507,8 @@ grant execute on function public.update_replacement_debt(uuid, text) to authenti
 grant execute on function public.mark_replacement_purchased(uuid) to authenticated;
 grant execute on function public.create_group_expense(uuid, text, numeric, text, text, text, text, jsonb) to authenticated;
 grant execute on function public.update_group_expense_payment(uuid, uuid, text) to authenticated;
+grant execute on function public.edit_roomie_message(uuid, text) to authenticated;
+grant execute on function public.edit_group_expense(uuid, text, numeric, text, jsonb) to authenticated;
 grant execute on function public.leave_household(uuid) to authenticated;
 
 grant select on public.households, public.household_members, public.household_messages, public.replacement_debts, public.group_expenses, public.group_expense_shares to authenticated;

@@ -71,6 +71,14 @@ export async function sendMessage(householdId: string, userId: string, message: 
   if (error) throw error;
 }
 
+export async function editRoomieMessage(messageId: string, message: string) {
+  const { error } = await configured().rpc("edit_roomie_message", {
+    target_message: messageId,
+    new_message: message.trim(),
+  });
+  if (error) throw error;
+}
+
 export async function createEvent(householdId: string, eventType: string, payload: Record<string, unknown>) {
   const { data, error } = await configured().rpc("create_roomie_event", {
     target_household: householdId,
@@ -105,6 +113,17 @@ export async function createGroupExpense(input: { householdId: string; concept: 
   });
   if (error) throw error;
   return data as string;
+}
+
+export async function editGroupExpense(input: { expenseId: string; concept: string; totalAmount: number; scope: "group" | "personal"; shares: Array<{ userId: string; amount: number }> }) {
+  const { error } = await configured().rpc("edit_group_expense", {
+    target_expense: input.expenseId,
+    expense_concept: input.concept,
+    expense_total: input.totalAmount,
+    expense_scope: input.scope,
+    participant_shares: input.shares,
+  });
+  if (error) throw error;
 }
 
 export async function updateGroupExpensePayment(expenseId: string, participantId: string, operation: "report" | "confirm" | "reject") {
